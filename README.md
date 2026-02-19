@@ -1,5 +1,7 @@
 ﻿CMD LOCAL AI
 
+## 🔧 Instructions
+
 EN:
 Local AI app (CLI + Ollama-compatible API) for running GGUF models with `llama-cpp-python`.
 
@@ -47,7 +49,7 @@ API
 - `POST /pull`
 - `GET /version`
 
-===============================Polish===============================
+===============================Polish================================
 
 Szybki start
 
@@ -95,13 +97,32 @@ Notes:
 - This project is designed to run fully local models.
 - The application can only work with the `models/` file and the `run.py` file
 
-===============================Polish===============================
+===============================Polish================================
 
 - `models/` i duże lokalne pliki binarne są wykluczane z repozytorium przez `.gitignore`.
 - Ten projekt został zaprojektowany do uruchamiania w pełni lokalnych modeli.
 - Aplikacja może działąć tylko z plikiem `models/` i z plikiem `run.py`
 
+---
+
+## ⭐ Inspirations
+
+===============================English===============================
+
+This project was inspired by tools like **Ollama** and **LM Studio**, which showed how powerful and accessible local AI models can be.  
+I wanted to bring a similar experience directly into the command line — simple, fast, and fully local — without the need for heavy interfaces or external services.  
+CMD LOCAL AI is my attempt to create a clean, terminal‑native way to interact with AI models.
+
+===============================Polish================================
+
+Inspiracją dla tego projektu były narzędzia takie jak **Ollama** i **LM Studio**, które pokazały, jak potężne i dostępne mogą być lokalne modele AI.
+Chciałem przenieść podobne środowisko bezpośrednio do wiersza poleceń — proste, szybkie i w pełni lokalne — bez potrzeby stosowania rozbudowanych interfejsów ani usług zewnętrznych.
+CMD LOCAL AI to moja próba stworzenia przejrzystego, natywnego dla terminala sposobu interakcji z modelami AI.
+
+
 THANKS FOR READ :)
+
+
 
 
 
