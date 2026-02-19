@@ -6,7 +6,7 @@ Lokalna aplikacja AI (CLI + API kompatybilne z Ollama) do uruchamiania modeli GG
 EN:
 Local AI app (CLI + Ollama-compatible API) for running GGUF models with `llama-cpp-python`.
 
---
+---
 
 ===============================English===============================
 
@@ -69,6 +69,7 @@ PL - API
 Notes:
 - `models/` and large local binaries are excluded from the repository by `.gitignore`.
 - This project is designed to run fully local models.
+
 
 
 
