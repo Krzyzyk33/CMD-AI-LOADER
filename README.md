@@ -11,7 +11,21 @@ Lokalna aplikacja AI (CLI + API kompatybilne z Ollama) do uruchamiania modeli GG
 
 ===============================English===============================
 
+Quick Start
+
+1. Python 3.11+ required.
+2. install gguf model and copy to `models/`
+3. Run the application:
+`py -3 run.py`
+4. Load the model:
+`load <filename.gguf>`
+5. Talk to the model:
+`ai`
+or:
+`chat <text>`
+
 CLI commands
+
 - `load` - choose model from list
 - `load <name>` - load model by filename
 - `models` - list local GGUF models
@@ -26,25 +40,30 @@ CLI commands
 - `update` - runtime update
 
 API
+
 - `GET /tags`
 - `POST /generate`
 - `POST /chat`
 - `POST /pull`
 - `GET /version`
-PL - Szybki start
+
+===============================Polish===============================
+
+Szybki start
+
 1. Wymagany Python 3.11+.
-2. Uruchom aplikacje:
+2.zainstaluj model gguf i skopiuj do `models/`
+3. Uruchom aplikacje:
    `py -3 run.py`
-3. Zaladuj model:
+4. Zaladuj model:
    `load <nazwa_pliku.gguf>`
-4. Rozmawiaj z modelem:
+5. Rozmawiaj z modelem:
    `ai`
    lub:
    `chat <tekst>`
 
-===============================Polish===============================
+Komendy CLI
 
-PL - Komendy CLI
 - `load` - wybor modelu z listy
 - `load <name>` - ladowanie modelu po nazwie pliku
 - `models` - lista modeli GGUF
@@ -58,7 +77,8 @@ PL - Komendy CLI
 - `version` - wersja `llama-cpp-python`
 - `update` - aktualizacja runtime
 
-PL - API
+API
+
 - `GET /tags`
 - `POST /generate`
 - `POST /chat`
@@ -82,6 +102,7 @@ Notes:
 - Aplikacja może działąć tylko z plikiem `models/` i z plikiem `run.py`
 
 THANKS FOR READ :)
+
 
 
 
