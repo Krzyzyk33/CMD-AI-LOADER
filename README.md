@@ -1,4 +1,5 @@
-﻿CMD LOCAL AI
+# ﻿CMD LOCAL AI
+
 
 ## 📝 Short Description
 
@@ -147,6 +148,7 @@ CMD LOCAL AI to projekt rozwijany krok po kroku. Poniżej kierunki, które planu
 ---
 
 ### THANKS FOR READING :)
+
 
 
 
