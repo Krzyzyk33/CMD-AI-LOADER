@@ -1,10 +1,11 @@
 ﻿CMD LOCAL AI
 
-PL:
-Lokalna aplikacja AI (CLI + API kompatybilne z Ollama) do uruchamiania modeli GGUF przez `llama-cpp-python`.
-
 EN:
 Local AI app (CLI + Ollama-compatible API) for running GGUF models with `llama-cpp-python`.
+
+
+PL:
+Lokalna aplikacja AI (CLI + API kompatybilne z Ollama) do uruchamiania modeli GGUF przez `llama-cpp-python`.
 
 ---
 
@@ -81,6 +82,7 @@ Notes:
 - Aplikacja może działąć tylko z plikiem `models/` i z plikiem `run.py`
 
 THANKS FOR READ :)
+
 
 
 
