@@ -144,8 +144,10 @@ CMD LOCAL AI to projekt rozwijany krok po kroku. Poniżej kierunki, które planu
 - **Integracja z pluginami / rozszerzeniami** - możliwość dodawania własnych komend i akcji wykonywanych przez AI.
 - **Wsparcie dla modeli audio i vision** - obsługa mowy i obrazów dla kompatybilnych modeli lokalnych.
 
+---
 
-## THANKS FOR READING :)
+### THANKS FOR READING :)
+
 
 
 
