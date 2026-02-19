@@ -7,7 +7,9 @@ EN:
 Local AI app (CLI + Ollama-compatible API) for running GGUF models with `llama-cpp-python`.
 
 --
+
 ===============================English===============================
+
 CLI commands
 - `load` - choose model from list
 - `load <name>` - load model by filename
@@ -39,6 +41,8 @@ PL - Szybki start
    lub:
    `chat <tekst>`
 
+===============================Polish===============================
+
 PL - Komendy CLI
 - `load` - wybor modelu z listy
 - `load <name>` - ladowanie modelu po nazwie pliku
@@ -65,5 +69,6 @@ PL - API
 Notes:
 - `models/` and large local binaries are excluded from the repository by `.gitignore`.
 - This project is designed to run fully local models.
+
 
 
