@@ -67,9 +67,16 @@ PL - API
 ---
 
 Notes:
+
+===============================English===============================
 - `models/` and large local binaries are excluded from the repository by `.gitignore`.
 - This project is designed to run fully local models.
 
+===============================Polish===============================
+- `models/` i duże lokalne pliki binarne są wykluczane z repozytorium przez `.gitignore`.
+- Ten projekt został zaprojektowany do uruchamiania w pełni lokalnych modeli.
+
+THANKS FOR READ :)
 
 
 
