@@ -10,7 +10,7 @@ Place any .gguf file inside the `models/` folder.
 Yes, Windows is the primary platform.
 
 ### Can I use multiple models?
-Multi‑model support is planned in the roadmap.
+Multi‑model You can't use yet.
 
 ### Does CMDAI have an API?
 Yes, available endpoints:
