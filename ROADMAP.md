@@ -1,15 +1,18 @@
 # CMD LOCAL AI - Changelog
 
 ## Update 1.1.1beta 
-Model Loading Improvements
-- Added loading spinner for better visual feedback.
-- Reduced console noise during model initialization.
-- Fixed several loading‑related bugs.
-Help UI Improvements
-- Improved layout and readability of the help screen.
-- Cleaned up formatting and spacing for better clarity.
-Command Changes
-- Removed quick commands to simplify the command structure.
+
+### Model Loading Improvements
+1. Added loading spinner for better visual feedback.
+2. Reduced console noise during model initialization.
+3. Fixed several loading‑related bugs.
+
+### Help UI Improvements
+3. Improved layout and readability of the help screen.
+2. Cleaned up formatting and spacing for better clarity.
+
+### Command Changes
+1. Removed quick commands to simplify the command structure.
 
 ## Update 1.1.0
 Released: 2026-02-19
