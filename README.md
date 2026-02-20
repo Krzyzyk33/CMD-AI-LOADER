@@ -4,11 +4,11 @@
 ## 📝 Short Description
 
 ### English:
-Local AI app (CLI + Ollama-compatible API) for running GGUF models with `llama-cpp-python`.
+Local AI app for running GGUF models with `llama-cpp-python`.
 
 
 ### Polish:
-Lokalna aplikacja AI (CLI + API kompatybilne z Ollama) do uruchamiania modeli GGUF przez `llama-cpp-python`.
+Lokalna aplikacja AI do uruchamiania modeli GGUF przez `llama-cpp-python`.
 
 ## 🔧 Instructions
 
@@ -42,7 +42,7 @@ or:
 - `version` - `llama-cpp-python` version
 - `update` - runtime update
 
-### API
+### SERVER (localhost:8080)
 
 - `GET /tags`
 - `POST /generate`
@@ -80,7 +80,7 @@ or:
 - `version` - wersja `llama-cpp-python`
 - `update` - aktualizacja runtime
 
-### API
+### SERWER (localhost:8080)
 
 - `GET /tags`
 - `POST /generate`
@@ -129,7 +129,6 @@ CMD LOCAL AI is a project being developed step by step. Below are the directions
 
 - **Support for multiple models simultaneously** - switching between local models without restarting the application.
 - **Performance profiling** - real-time viewing of generation time and RAM and CPU usage.
-- **Conversation history** - saving and reviewing previous sessions in the form of simple logs.
 - **Developer Tools mode** - viewing system prompts, tokens, and raw model responses.
 - **Integration with plugins/extensions** - the ability to add custom commands and actions performed by the AI.
 - **Support for audio and vision models** - speech and image support for compatible local models.
@@ -140,7 +139,6 @@ CMD LOCAL AI to projekt rozwijany krok po kroku. Poniżej kierunki, które planu
 
 - **Wsparcie dla wielu modeli jednocześnie** - przełączanie między lokalnymi modelami bez restartu aplikacji.
 - **Profilowanie wydajności** - podgląd czasu generowania oraz zużycia RAM i CPU w czasie rzeczywistym.
-- **Historia rozmów** - zapisywanie i przeglądanie poprzednich sesji w formie prostych logów.
 - **Tryb Developer Tools** - podgląd promptów systemowych, tokenów i surowych odpowiedzi modelu.
 - **Integracja z pluginami / rozszerzeniami** - możliwość dodawania własnych komend i akcji wykonywanych przez AI.
 - **Wsparcie dla modeli audio i vision** - obsługa mowy i obrazów dla kompatybilnych modeli lokalnych.
@@ -148,6 +146,7 @@ CMD LOCAL AI to projekt rozwijany krok po kroku. Poniżej kierunki, które planu
 ---
 
 ### THANKS FOR READING :)
+
 
 
 
