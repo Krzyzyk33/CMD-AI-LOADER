@@ -1388,7 +1388,6 @@ class OllamaAPIHandler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(f"data: {json.dumps(error_response)}\n\n".encode())
 
     def _handle_chat(self, data: Dict):
-        """Handle chat (Ollama /api/chat compatible)."""
         if not loader.current_model:
             self._set_headers(400)
             self.wfile.write(json.dumps({
@@ -2153,7 +2152,6 @@ def _wait_before_terminal_close() -> None:
 
 
 def main():
-    """Main program entrypoint."""
     global http_server, loader, HAS_AI_ENGINE, LAST_UPDATE_STATUS, HTTP_PORT
 
     loader = SimpleGGUFLoader()
@@ -2378,6 +2376,7 @@ if __name__ == "__main__":
         traceback.print_exc()
     finally:
         _wait_before_terminal_close()
+
 
 
 
