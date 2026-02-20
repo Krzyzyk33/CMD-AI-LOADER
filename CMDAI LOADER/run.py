@@ -844,7 +844,6 @@ class SimpleGGUFLoader:
                     spinner_chars = ['|', '/', '-', '\\']
                     start_time = time.time()
                     
-                    # Start spinner in background
                     import threading
                     import sys
                     import os
@@ -1222,7 +1221,6 @@ class OllamaAPIHandler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(response, indent=2).encode())
     
     def _handle_show_model(self):
-        """Returns model details (Ollama /api/show compatible)."""
         if not loader.current_model:
             self._set_headers(400)
             self.wfile.write(json.dumps({
@@ -1505,7 +1503,6 @@ class OllamaAPIHandler(http.server.BaseHTTPRequestHandler):
             }).encode())
 
     def _handle_copy(self, data: Dict):
-        """Kopiowanie modelu (kompatybilne z Ollama /api/copy)"""
         self._set_headers(200)
         self.wfile.write(json.dumps({
             "status": "success"
@@ -2376,6 +2373,7 @@ if __name__ == "__main__":
         traceback.print_exc()
     finally:
         _wait_before_terminal_close()
+
 
 
 
