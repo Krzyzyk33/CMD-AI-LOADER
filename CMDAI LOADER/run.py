@@ -294,7 +294,6 @@ class SimpleGGUFLoader:
             os.makedirs(self.models_dir)
     
     def _print_progress(self, current: int, total: int, desc: str = "") -> None:
-        """Display progress bar in console"""
         with self._progress_lock:
             self._progress_current = current
             self._progress_total = total
@@ -569,7 +568,6 @@ class SimpleGGUFLoader:
         )
 
     def _sha256_file(self, file_path: str) -> str:
-        """Wylicza SHA-256 dla pobranego pliku."""
         digest = hashlib.sha256()
         with open(file_path, "rb") as handle:
             while True:
@@ -947,7 +945,6 @@ class SimpleGGUFLoader:
             return False
 
     def _find_mmproj(self, model_name: str) -> Optional[str]:
-        """Znajdz plik mmproj dla modelu wizyjnego"""
         model_full_path = os.path.join(self.models_dir, model_name)
         model_dir = os.path.dirname(model_full_path) or self.models_dir
         model_stem = os.path.splitext(os.path.basename(model_name))[0]
@@ -1520,7 +1517,6 @@ class ReusableTCPServer(socketserver.TCPServer):
 
 
 def start_http_server(port: int = HTTP_PORT) -> socketserver.TCPServer:
-    """Start HTTP server in a background thread."""
     httpd = None
     selected_port = port
     last_error = None
@@ -1648,7 +1644,6 @@ def show_quick_commands() -> None:
 
 
 def show_help():
-    """Show available commands."""
     
     term_width = shutil.get_terminal_size().columns
     
@@ -1757,7 +1752,6 @@ def show_help():
 
 
 def show_models_menu():
-    """Show model selection menu."""
     if not HAS_AI_ENGINE:
         print("\n" + "=" * 60)
         print("ERROR: AI ENGINE NOT INSTALLED")
@@ -2089,7 +2083,6 @@ def _is_model_unload_shortcut(text: str) -> bool:
 
 
 def run_terminal_chat_session() -> None:
-    """Interactive chat loop with a loaded model."""
     if not loader or not loader.current_model:
         print("ERROR: No model loaded. Use 'load' first.")
         return
@@ -2385,5 +2378,6 @@ if __name__ == "__main__":
         traceback.print_exc()
     finally:
         _wait_before_terminal_close()
+
 
 
