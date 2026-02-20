@@ -2,7 +2,7 @@
 ---
 
 A local terminal AI assistant based on GGUF and llama‑cpp‑python models.
-No cloud. Zero telemetry. Complete privacy.
+No cloud. Complete privacy.
 
 ## 🎥 Demo
 coming soon
@@ -105,6 +105,7 @@ CMD LOCAL AI is a project being developed step by step. Below are the directions
 ---
 
 ### 🤗 THANKS FOR READING :)
+
 
 
 
