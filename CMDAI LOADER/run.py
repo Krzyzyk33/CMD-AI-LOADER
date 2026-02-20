@@ -59,19 +59,16 @@ def _is_env_flag_enabled(name: str, default: bool = False) -> bool:
 
 
 def load_model_aliases():
-    """Load model aliases from GGUF files in models/ directory."""
     aliases = {}
     
     if not os.path.exists("models"):
         return aliases
     
-    # Scan for GGUF files in models directory
     for filename in os.listdir("models"):
         if filename.endswith('.gguf') and 'mmproj' not in filename.lower():
-            # Create alias from filename (remove .gguf extension)
-            alias_name = filename[:-5]  # Remove .gguf
+            alias_name = filename[:-5]  
             aliases[alias_name] = {
-                "url": f"file://{filename}",  # Local file reference
+                "url": f"file://{filename}", 
                 "filename": filename
             }
     
@@ -139,7 +136,7 @@ def _read_gguf_architecture(model_path: str) -> Optional[str]:
             version = _read_u32(handle)
             if version < 2:
                 return None
-            _ = _read_u64(handle)  # tensor count
+            _ = _read_u64(handle)  
             kv_count = _read_u64(handle)
             for _ in range(kv_count):
                 key = _read_str(handle)
@@ -153,7 +150,6 @@ def _read_gguf_architecture(model_path: str) -> Optional[str]:
 
 
 def _configure_llama_logging(llama_cpp) -> None:
-    """Reduce noisy llama.cpp logs unless user explicitly requests verbose mode."""
     global _LLAMA_LOG_CONFIGURED, _LLAMA_LOG_CALLBACK
     if _LLAMA_LOG_CONFIGURED:
         return
@@ -181,7 +177,6 @@ def _configure_llama_logging(llama_cpp) -> None:
 
 
 def _patch_llama_model_del(llama_cpp) -> None:
-    """Suppress known non-fatal __del__ noise from partially initialized models."""
     try:
         internals = getattr(llama_cpp, "_internals", None)
         model_cls = getattr(internals, "LlamaModel", None) if internals else None
@@ -207,7 +202,6 @@ def _patch_llama_model_del(llama_cpp) -> None:
         pass
 
 def ensure_llama_cpp():
-    """Laduje llama_cpp i zwraca modul albo None."""
     try:
         import llama_cpp
         _configure_llama_logging(llama_cpp)
@@ -218,7 +212,6 @@ def ensure_llama_cpp():
 
 
 class OutputFilter:
-    """Filtruje niechciane tagi z odpowiedzi modelu"""
     def __init__(self):
         self.buffer = ""
         self.in_tag = False
@@ -226,7 +219,6 @@ class OutputFilter:
         self.keep_tags = ["/im_end", "im_end"]
     
     def feed(self, text: str) -> str:
-        """Przetwarza wejĂ„â€šĂ˘â‚¬ĹľÄ‚â€žĂ˘â‚¬Â¦Ă„â€šĂ‹ÂÄ‚ËĂ˘â‚¬ĹˇĂ‚Â¬Ă„Ä…ÄąĹźciowy tekst i usuwa niechciane tagi"""
         self.buffer += text
         result = []
         i = 0
@@ -393,7 +385,6 @@ class SimpleGGUFLoader:
         print("\r" + " " * self._progress_last_len, end="\r")
 
     def _progress_newline(self) -> None:
-        """Konczy wyswietlanie paska postepu i przechodzi do nowej linii."""
         thread_to_join = None
         with self._progress_lock:
             if self._progress_stop_event:
@@ -507,13 +498,11 @@ class SimpleGGUFLoader:
         return cleaned
 
     def _resolve_download_target(self, source: str, output_name: Optional[str] = None) -> Tuple[str, str]:
-        """Mapuje alias lub URL na finalny URL i nazwe pliku."""
         normalized = (source or "").strip()
         normalized_lc = normalized.lower()
         if not normalized:
             raise ValueError("Nie podano zrodla modelu.")
 
-        # Load aliases dynamically from file
         model_aliases = load_model_aliases()
         
         if normalized in model_aliases:
@@ -596,7 +585,6 @@ class SimpleGGUFLoader:
         output_name: Optional[str] = None,
         overwrite: bool = False
     ) -> Dict[str, Any]:
-        """Pobiera model GGUF z aliasu lub URL do katalogu models/."""
         url, filename = self._resolve_download_target(source, output_name)
         destination = os.path.join(self.models_dir, filename)
         partial = f"{destination}.part"
@@ -982,18 +970,16 @@ class SimpleGGUFLoader:
         return None
 
     def _get_total_ram_mb(self) -> int:
-        """Zwraca caĂ„â€šĂ˘â‚¬ĹľÄ‚â€žĂ˘â‚¬Â¦Ă„â€šĂ‹ÂÄ‚ËĂ˘â‚¬ĹˇĂ‚Â¬Ă„Ä…Ă‹â€ˇkowitÄ‚â€žĂ˘â‚¬ĹˇÄ‚ËĂ˘â€šÂ¬ÄąÄľĂ„â€šĂ‹ÂÄ‚ËĂ˘â‚¬ĹˇĂ‚Â¬Ä‚â€šĂ‚Â¦ iloĂ„â€šĂ˘â‚¬ĹľÄ‚â€žĂ˘â‚¬Â¦Ă„â€šĂ‹ÂÄ‚ËĂ˘â‚¬ĹˇĂ‚Â¬Ă„Ä…ÄąĹźÄ‚â€žĂ˘â‚¬ĹˇÄ‚ËĂ˘â€šÂ¬ÄąÄľĂ„â€šĂ‹ÂÄ‚ËĂ˘â‚¬ĹˇĂ‚Â¬Ä‚â€ąĂ˘â‚¬Ë‡ pamiÄ‚â€žĂ˘â‚¬ĹˇÄ‚ËĂ˘â€šÂ¬ÄąÄľĂ„â€šĂ‹ÂÄ‚ËĂ˘â€šÂ¬ÄąÄľÄ‚â€ąĂ‚Âci RAM w MB"""
         if self._cached_total_ram_mb is not None:
             return self._cached_total_ram_mb
         try:
             import psutil
             self._cached_total_ram_mb = psutil.virtual_memory().total // (1024 * 1024)
         except:
-            self._cached_total_ram_mb = 8192  # DomyĂ„â€šĂ˘â‚¬ĹľÄ‚â€žĂ˘â‚¬Â¦Ă„â€šĂ‹ÂÄ‚ËĂ˘â‚¬ĹˇĂ‚Â¬Ă„Ä…ÄąĹźlnie 8GB
+            self._cached_total_ram_mb = 8192  
         return self._cached_total_ram_mb
     
     def _get_gpu_vram_mb(self) -> int:
-        """Zwraca iloĂ„â€šĂ˘â‚¬ĹľÄ‚â€žĂ˘â‚¬Â¦Ă„â€šĂ‹ÂÄ‚ËĂ˘â‚¬ĹˇĂ‚Â¬Ă„Ä…ÄąĹźÄ‚â€žĂ˘â‚¬ĹˇÄ‚ËĂ˘â€šÂ¬ÄąÄľĂ„â€šĂ‹ÂÄ‚ËĂ˘â‚¬ĹˇĂ‚Â¬Ä‚â€ąĂ˘â‚¬Ë‡ pamiÄ‚â€žĂ˘â‚¬ĹˇÄ‚ËĂ˘â€šÂ¬ÄąÄľĂ„â€šĂ‹ÂÄ‚ËĂ˘â€šÂ¬ÄąÄľÄ‚â€ąĂ‚Âci VRAM w MB, jeĂ„â€šĂ˘â‚¬ĹľÄ‚â€žĂ˘â‚¬Â¦Ă„â€šĂ‹ÂÄ‚ËĂ˘â‚¬ĹˇĂ‚Â¬Ă„Ä…ÄąĹźli dostÄ‚â€žĂ˘â‚¬ĹˇÄ‚ËĂ˘â€šÂ¬ÄąÄľĂ„â€šĂ‹ÂÄ‚ËĂ˘â€šÂ¬ÄąÄľÄ‚â€ąĂ‚Âpna karta graficzna"""
         if self._cached_gpu_vram_mb is not None:
             return self._cached_gpu_vram_mb
         if self._gpu_probe_attempted:
@@ -1015,7 +1001,6 @@ class SimpleGGUFLoader:
         return 0
     
     def _get_smart_params(self, model_size_mb: float, total_ram_mb: int, gpu_vram_mb: int) -> Optional[Dict]:
-        """Returns smart params based on available system resources."""
         try:
             required_ram = int(model_size_mb * 1.5)
 
@@ -1049,7 +1034,6 @@ class SimpleGGUFLoader:
             return None
 
     def unload(self) -> bool:
-        """Releases loaded model from memory."""
         if self.model:
             try:
                 del self.model
@@ -1064,7 +1048,6 @@ class SimpleGGUFLoader:
         return True
 
     def count_tokens(self, text: str) -> int:
-        """Best-effort token counter for currently loaded model."""
         if not text:
             return 0
         if not self.model:
@@ -1081,7 +1064,6 @@ class SimpleGGUFLoader:
 
     def generate(self, prompt: str, max_tokens: int = 512, temperature: float = 0.7,
                 top_p: float = 0.9, stream: bool = False, **kwargs) -> Union[str, None]:
-        """Generates a response for the given prompt."""
         if not self.model:
             raise ValueError("No model loaded. Use 'load' first.")
 
@@ -1102,7 +1084,6 @@ class SimpleGGUFLoader:
 
     def _stream_response(self, prompt: str, max_tokens: int, temperature: float,
                         top_p: float, **kwargs) -> str:
-        """Streams model response token-by-token."""
         try:
             response = self.model(
                 prompt=prompt,
@@ -1123,10 +1104,8 @@ class SimpleGGUFLoader:
             raise
 
 class OllamaAPIHandler(http.server.BaseHTTPRequestHandler):
-    """Prosty serwer HTTP z API kompatybilnym z Ollama"""
     
     def _set_headers(self, status_code=200, content_type='application/json'):
-        """Ustawia nagĂ„â€šĂ˘â‚¬ĹľÄ‚â€žĂ˘â‚¬Â¦Ă„â€šĂ‹ÂÄ‚ËĂ˘â‚¬ĹˇĂ‚Â¬Ă„Ä…Ă‹â€ˇĂ„â€šĂ˘â‚¬ĹľÄ‚ËĂ˘â€šÂ¬ÄąË‡Ä‚â€žĂ„â€¦Ä‚ËĂ˘â€šÂ¬ÄąË‡wki odpowiedzi HTTP"""
         self.send_response(status_code)
         self.send_header('Content-Type', content_type)
         self.send_header('Access-Control-Allow-Origin', '*')
@@ -1135,12 +1114,10 @@ class OllamaAPIHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
     
     def do_OPTIONS(self):
-        """ObsĂ„â€šĂ˘â‚¬ĹľÄ‚â€žĂ˘â‚¬Â¦Ă„â€šĂ‹ÂÄ‚ËĂ˘â‚¬ĹˇĂ‚Â¬Ă„Ä…Ă‹â€ˇuga Ă„â€šĂ˘â‚¬ĹľÄ‚â€žĂ˘â‚¬Â¦Ă„â€šĂ˘â‚¬ĹľÄ‚â€ąÄąÄ„Ä‚â€žĂ˘â‚¬ĹˇÄ‚ËĂ˘â€šÂ¬ÄąÄľĂ„â€šĂ‹ÂÄ‚ËĂ˘â‚¬ĹˇĂ‚Â¬Ä‚â€šĂ‚Â¦daĂ„â€šĂ˘â‚¬ĹľÄ‚â€žĂ˘â‚¬Â¦Ă„â€šĂ‹ÂÄ‚ËĂ˘â‚¬ĹˇĂ‚Â¬Ă„Ä…Ă„Äľ OPTIONS dla CORS"""
         self._set_headers(200)
         self.wfile.write(b'')
     
     def do_GET(self):
-        """Handle GET requests."""
         try:
             parsed_path = urlparse(self.path)
             path = parsed_path.path
@@ -1223,7 +1200,6 @@ class OllamaAPIHandler(http.server.BaseHTTPRequestHandler):
             }).encode())
 
     def _handle_tags(self):
-        """Zwraca listÄ‚â€žĂ˘â‚¬ĹˇÄ‚ËĂ˘â€šÂ¬ÄąÄľĂ„â€šĂ‹ÂÄ‚ËĂ˘â€šÂ¬ÄąÄľÄ‚â€ąĂ‚Â dostÄ‚â€žĂ˘â‚¬ĹˇÄ‚ËĂ˘â€šÂ¬ÄąÄľĂ„â€šĂ‹ÂÄ‚ËĂ˘â€šÂ¬ÄąÄľÄ‚â€ąĂ‚Âpnych modeli (kompatybilne z Ollama /api/tags)"""
         models = loader.list_models()
         
         response = {
@@ -1235,10 +1211,10 @@ class OllamaAPIHandler(http.server.BaseHTTPRequestHandler):
                     "digest": hashlib.sha256(m['name'].encode()).hexdigest(),
                     "details": {
                         "format": "gguf",
-                        "family": "llama",  # DomyĂ„â€šĂ˘â‚¬ĹľÄ‚â€žĂ˘â‚¬Â¦Ă„â€šĂ‹ÂÄ‚ËĂ˘â‚¬ĹˇĂ‚Â¬Ă„Ä…ÄąĹźlnie zakĂ„â€šĂ˘â‚¬ĹľÄ‚â€žĂ˘â‚¬Â¦Ă„â€šĂ‹ÂÄ‚ËĂ˘â‚¬ĹˇĂ‚Â¬Ă„Ä…Ă‹â€ˇadamy, Ă„â€šĂ˘â‚¬ĹľÄ‚â€žĂ˘â‚¬Â¦Ă„â€šĂ˘â‚¬ĹľÄ‚â€ąÄąÄ„e to model LLaMA
+                        "family": "llama",  
                         "families": ["llama"],
-                        "parameter_size": "7B",  # PrzykĂ„â€šĂ˘â‚¬ĹľÄ‚â€žĂ˘â‚¬Â¦Ă„â€šĂ‹ÂÄ‚ËĂ˘â‚¬ĹˇĂ‚Â¬Ă„Ä…Ă‹â€ˇadowa wartoĂ„â€šĂ˘â‚¬ĹľÄ‚â€žĂ˘â‚¬Â¦Ă„â€šĂ‹ÂÄ‚ËĂ˘â‚¬ĹˇĂ‚Â¬Ă„Ä…ÄąĹźÄ‚â€žĂ˘â‚¬ĹˇÄ‚ËĂ˘â€šÂ¬ÄąÄľĂ„â€šĂ‹ÂÄ‚ËĂ˘â‚¬ĹˇĂ‚Â¬Ä‚â€ąĂ˘â‚¬Ë‡
-                        "quantization_level": "Q4_0"  # PrzykĂ„â€šĂ˘â‚¬ĹľÄ‚â€žĂ˘â‚¬Â¦Ă„â€šĂ‹ÂÄ‚ËĂ˘â‚¬ĹˇĂ‚Â¬Ă„Ä…Ă‹â€ˇadowa wartoĂ„â€šĂ˘â‚¬ĹľÄ‚â€žĂ˘â‚¬Â¦Ă„â€šĂ‹ÂÄ‚ËĂ˘â‚¬ĹˇĂ‚Â¬Ă„Ä…ÄąĹźÄ‚â€žĂ˘â‚¬ĹˇÄ‚ËĂ˘â€šÂ¬ÄąÄľĂ„â€šĂ‹ÂÄ‚ËĂ˘â‚¬ĹˇĂ‚Â¬Ä‚â€ąĂ˘â‚¬Ë‡
+                        "parameter_size": "7B",  
+                    "quantization_level": "Q4_0"  
                     }
                 }
                 for m in models
@@ -1258,7 +1234,7 @@ class OllamaAPIHandler(http.server.BaseHTTPRequestHandler):
             return
 
         model_info = {
-            "license": "MIT",
+            "license": "Own",
             "modelfile": f"# Modelfile for {loader.current_model}\nFROM {loader.current_model}",
             "parameters": "num_ctx 4096",
             "template": "{{ if .System }}<|system|>\n{{ .System }}<|end|>\n{{ end }}{{ .Prompt }}<|end|>\n<|assistant|>",
@@ -1275,7 +1251,6 @@ class OllamaAPIHandler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(model_info, indent=2).encode())
 
     def _handle_version(self):
-        """Zwraca wersjÄ‚â€žĂ˘â‚¬ĹˇÄ‚ËĂ˘â€šÂ¬ÄąÄľĂ„â€šĂ‹ÂÄ‚ËĂ˘â€šÂ¬ÄąÄľÄ‚â€ąĂ‚Â API (kompatybilne z Ollama /api/version)"""
         version_info = {
             "version": "0.1.0",
             "compatibility": {
@@ -1288,7 +1263,6 @@ class OllamaAPIHandler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(version_info, indent=2).encode())
     
     def _handle_generate(self, data: Dict):
-        """Handle text generation (Ollama /api/generate compatible)."""
         if not loader.current_model:
             self._set_headers(400)
             self.wfile.write(json.dumps({
@@ -1365,7 +1339,6 @@ class OllamaAPIHandler(http.server.BaseHTTPRequestHandler):
             }).encode())
 
     def _stream_generate(self, prompt: str, max_tokens: int, temperature: float, top_p: float):
-        """Strumieniuje odpowiedĂ„â€šĂ˘â‚¬ĹľÄ‚â€žĂ˘â‚¬Â¦Ä‚â€žĂ„â€¦Ă„Ä…ÄąĹş token po tokenie (kompatybilne z Ollama)"""
         self.send_response(200)
         self.send_header('Content-Type', 'text/event-stream')
         self.send_header('Cache-Control', 'no-cache')
@@ -1473,7 +1446,6 @@ class OllamaAPIHandler(http.server.BaseHTTPRequestHandler):
             }).encode())
 
     def _format_chat_messages(self, messages: List[Dict]) -> str:
-        """Formatuje wiadomoĂ„â€šĂ˘â‚¬ĹľÄ‚â€žĂ˘â‚¬Â¦Ă„â€šĂ‹ÂÄ‚ËĂ˘â‚¬ĹˇĂ‚Â¬Ă„Ä…ÄąĹźci czatu na pojedynczy prompt"""
         formatted = []
         for msg in messages:
             role = msg.get('role', 'user')
@@ -1490,7 +1462,6 @@ class OllamaAPIHandler(http.server.BaseHTTPRequestHandler):
 
     def _stream_chat_response(self, messages: List[Dict], prompt: str, max_tokens: int, 
                             temperature: float, top_p: float):
-        """Strumieniuje odpowiedĂ„â€šĂ˘â‚¬ĹľÄ‚â€žĂ˘â‚¬Â¦Ä‚â€žĂ„â€¦Ă„Ä…ÄąĹş czatu token po tokenie"""
         self.send_response(200)
         self.send_header('Content-Type', 'text/event-stream')
         self.send_header('Cache-Control', 'no-cache')
@@ -1500,7 +1471,6 @@ class OllamaAPIHandler(http.server.BaseHTTPRequestHandler):
 
 
     def _handle_pull(self, data: Dict):
-        """Download model (Ollama /api/pull compatible)."""
         source = str(data.get("name") or data.get("model") or data.get("source") or "").strip()
         output_name = data.get("filename") or data.get("output")
         auto_load = bool(data.get("load", False))
@@ -1590,7 +1560,6 @@ def start_http_server(port: int = HTTP_PORT) -> socketserver.TCPServer:
 
 
 def clear_screen():
-    """Clear terminal screen."""
     stdin_ok = hasattr(sys.stdin, "isatty") and sys.stdin.isatty()
     stdout_ok = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
     if not (stdin_ok and stdout_ok):
@@ -1599,7 +1568,6 @@ def clear_screen():
 
 
 def _read_terminal_line(prompt: str) -> str:
-    """Read input line and support physical Esc key on Windows terminals."""
     stdin_ok = hasattr(sys.stdin, "isatty") and sys.stdin.isatty()
     stdout_ok = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
     if not (stdin_ok and stdout_ok):
@@ -1656,7 +1624,6 @@ def _read_terminal_line(prompt: str) -> str:
 
 
 def print_welcome():
-    """Print welcome header."""
     clear_screen()
     print("\n" + "=" * 60)
     print("                 CMD LOCAL AI")
@@ -1735,7 +1702,6 @@ def show_help():
         ("POST /pull", "Download model")
     ]
     
-    # Print MODELS and CHAT side by side
     models_centered = f"{'MODELS':^{left_width}}"
     chat_centered = f"{'CHAT':^{right_width}}"
     print(f"\n{models_centered}{' ' * separator_width}{chat_centered}")
@@ -1746,14 +1712,12 @@ def show_help():
         model_cmd = models_cmds[i] if i < len(models_cmds) else ("", "")
         chat_cmd = chat_cmds[i] if i < len(chat_cmds) else ("", "")
 
-        # Left column (MODELS)
         if model_cmd[0]:
             left = f"{model_cmd[0]:<20} - {model_cmd[1]}"
         else:
             left = ""
         left_formatted = f"{left:<{left_width}}"
 
-        # Right column (CHAT)
         if chat_cmd[0]:
             right = f"{chat_cmd[0]:<20} - {chat_cmd[1]}"
         else:
@@ -1762,7 +1726,6 @@ def show_help():
 
         print(f"{left_formatted}{' ' * separator_width}{right_formatted}")
 
-    # Print SYSTEM and SERVER side by side
     system_centered = f"{'SYSTEM':^{left_width}}"
     server_centered = f"{'SERVER':^{right_width}}"
     print(f"\n{system_centered}{' ' * separator_width}{server_centered}")
@@ -1773,14 +1736,12 @@ def show_help():
         system_cmd = system_cmds[i] if i < len(system_cmds) else ("", "")
         server_cmd = server_cmds[i] if i < len(server_cmds) else ("", "")
 
-        # Left column (SYSTEM)
         if system_cmd[0]:
             left = f"{system_cmd[0]:<20} - {system_cmd[1]}"
         else:
             left = ""
         left_formatted = f"{left:<{left_width}}"
 
-        # Right column (SERVER)
         if server_cmd[0]:
             right = f"{server_cmd[0]:<20} - {server_cmd[1]}"
         else:
@@ -1834,7 +1795,6 @@ def show_models_menu():
 
 
 def show_download_catalog():
-    """Show built-in aliases for model downloads."""
     aliases = loader.list_model_aliases() if loader else []
     print("\n" + "=" * 60)
     print("  DOWNLOADABLE MODEL ALIASES")
@@ -1851,7 +1811,6 @@ def show_download_catalog():
 
 
 def show_status():
-    """Show runtime status."""
     print("\n" + "=" * 60)
     print("  SYSTEM STATUS")
     print("=" * 60)
@@ -1905,7 +1864,6 @@ def _build_answer_only_prompt(user_text: str) -> str:
 
 
 def _write_chat_debug(stage: str, user_text: str, raw_response: str, filtered: str) -> None:
-    """Append lightweight chat diagnostics for hard-to-debug outputs."""
     try:
         stamp = datetime.now().isoformat()
         entry = (
@@ -1922,7 +1880,6 @@ def _write_chat_debug(stage: str, user_text: str, raw_response: str, filtered: s
 
 
 def _run_with_spinner(func, desc: str = "generating"):
-    """Run blocking generation in a thread and display spinner in terminal."""
     outcome: Dict[str, Any] = {"value": None, "error": None}
     finished = threading.Event()
 
@@ -1959,7 +1916,6 @@ def _run_with_spinner(func, desc: str = "generating"):
 
 
 def send_terminal_prompt(prompt: str, max_tokens: int = 512, temperature: float = 0.7, top_p: float = 0.9) -> bool:
-    """Send one prompt to currently loaded model and print response."""
     if not loader or not loader.current_model:
         print("ERROR: No model loaded. Use 'load' first.")
         return False
@@ -2041,7 +1997,6 @@ def send_terminal_prompt(prompt: str, max_tokens: int = 512, temperature: float 
 
 
 def _extract_visible_answer(raw_text: str) -> str:
-    """Hide common reasoning traces and keep only final visible answer."""
     text = OutputFilter().feed(raw_text or "")
     text = text.strip()
     if not text:
@@ -2430,3 +2385,4 @@ if __name__ == "__main__":
         traceback.print_exc()
     finally:
         _wait_before_terminal_close()
+
