@@ -1,6 +1,6 @@
 # CMD LOCAL AI - Changelog
 
-## Update 1.1.1beta 
+## Update 1.1.0beta 
 Released: 2026-02-20
 
 ### Model Loading Improvements
@@ -15,7 +15,7 @@ Released: 2026-02-20
 ### Command Changes
 1. Removed quick commands to simplify the command structure.
 
-## Update 1.1.0
+## Update 1.0.0
 Released: 2026-02-19
 
 ### Chat UX Improvements
