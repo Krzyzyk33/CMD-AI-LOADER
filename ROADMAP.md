@@ -1,28 +1,39 @@
 # CMD LOCAL AI - Changelog
 
+## Update 1.1.1beta 
+Model Loading Improvements
+- Added loading spinner for better visual feedback.
+- Reduced console noise during model initialization.
+- Fixed several loading‑related bugs.
+Help UI Improvements
+- Improved layout and readability of the help screen.
+- Cleaned up formatting and spacing for better clarity.
+Command Changes
+- Removed quick commands to simplify the command structure.
+
 ## Update 1.1.0
 Released: 2026-02-19
 
 ### Chat UX Improvements
-- Added `AI>` prompt for chat mode.
-- Added spinner during response generation.
-- Added token/time info bar above AI response.
-- Improved filtering to show only the final answer.
-- Added `Esc`/`esc` exit for interactive chat mode.
+1. Added `AI>` prompt for chat mode.
+2. Added spinner during response generation.
+3. Added token/time info bar above AI response.
+4. Improved filtering to show only the final answer.
+5. Added `Esc`/`esc` exit for interactive chat mode.
 
 ### Model Loading Improvements
-- Improved load timeout handling and retry behavior.
-- Prevented overlapping background model loads after timeout.
-- Added clearer architecture compatibility warnings.
+1. Improved load timeout handling and retry behavior.
+2. Prevented overlapping background model loads after timeout.
+3. Added clearer architecture compatibility warnings.
 
 ### Terminal Flow Improvements
-- Added `ai` chat mode command.
-- Added `chat <text>` single-message command.
-- Added plain-text fallback to send message when a model is already loaded.
+1. Added `ai` chat mode command.
+2. Added `chat <text>` single-message command.
+3. Added plain-text fallback to send message when a model is already loaded.
 
 ### Documentation Updates
-- Updated `README.md` with Polish and English sections.
-- Updated `index.html` with Polish and English app overview.
+4. Updated `README.md` with Polish and English sections.
+5. Updated `index.html` with Polish and English app overview.
 
 ---
 
