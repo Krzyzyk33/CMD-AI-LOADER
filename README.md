@@ -55,7 +55,7 @@ or:
 ### Szybki start
 
 1. Wymagany Python 3.11+.
-2.zainstaluj model gguf i skopiuj do `models/`
+2. Zainstaluj model gguf i skopiuj do `models/`
 3. Uruchom aplikacje:
    `py -3 run.py`
 4. Zaladuj model:
@@ -146,6 +146,7 @@ CMD LOCAL AI to projekt rozwijany krok po kroku. Poniżej kierunki, które planu
 ---
 
 ### THANKS FOR READING :)
+
 
 
 
