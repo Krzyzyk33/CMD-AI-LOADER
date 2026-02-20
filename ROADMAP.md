@@ -1,6 +1,7 @@
 # CMD LOCAL AI - Changelog
 
 ## Update 1.1.1beta 
+Released: 2026-02-20
 
 ### Model Loading Improvements
 1. Added loading spinner for better visual feedback.
