@@ -1,4 +1,4 @@
-﻿import os
+import os
 import sys
 import re
 import json
@@ -9,6 +9,7 @@ import hashlib
 import importlib
 import subprocess
 import threading
+import contextlib
 import http.server
 import socketserver
 from http import HTTPStatus
@@ -43,6 +44,7 @@ http_server = None
 loader = None
 _LLAMA_LOG_CONFIGURED = False
 _LLAMA_LOG_CALLBACK = None
+TERMINAL_CHAT_HISTORY: List[Dict[str, str]] = []
 
 RECOMMENDED_RUNTIME_PACKAGES = [
     "llama-cpp-python",
@@ -50,13 +52,10 @@ RECOMMENDED_RUNTIME_PACKAGES = [
 
 KNOWN_UNSUPPORTED_ARCH_BY_MAX_VERSION: Dict[str, Tuple[int, int, int]] = {}
 
-
-
 def _is_env_flag_enabled(name: str, default: bool = False) -> bool:
     fallback = "1" if default else "0"
     value = os.environ.get(name, fallback).strip().lower()
     return value in {"1", "true", "yes", "on"}
-
 
 def load_model_aliases():
     aliases = {}
@@ -66,14 +65,13 @@ def load_model_aliases():
     
     for filename in os.listdir("models"):
         if filename.endswith('.gguf') and 'mmproj' not in filename.lower():
-            alias_name = filename[:-5]  
+            alias_name = filename[:-5]
             aliases[alias_name] = {
-                "url": f"file://{filename}", 
+                "url": f"file://{filename}",
                 "filename": filename
             }
     
     return aliases
-
 
 def _parse_version_tuple(version_text: str) -> Tuple[int, int, int]:
     parts = (version_text or "").strip().split(".")
@@ -85,13 +83,11 @@ def _parse_version_tuple(version_text: str) -> Tuple[int, int, int]:
         out.append(0)
     return tuple(out)  
 
-
 def _is_arch_known_unsupported(arch: str, llama_version: str) -> bool:
     max_version = KNOWN_UNSUPPORTED_ARCH_BY_MAX_VERSION.get((arch or "").strip().lower())
     if not max_version:
         return False
     return _parse_version_tuple(llama_version) <= max_version
-
 
 def _read_gguf_architecture(model_path: str) -> Optional[str]:
     def _read_exact(handle, size: int) -> bytes:
@@ -136,7 +132,7 @@ def _read_gguf_architecture(model_path: str) -> Optional[str]:
             version = _read_u32(handle)
             if version < 2:
                 return None
-            _ = _read_u64(handle)  
+            _ = _read_u64(handle)
             kv_count = _read_u64(handle)
             for _ in range(kv_count):
                 key = _read_str(handle)
@@ -147,7 +143,6 @@ def _read_gguf_architecture(model_path: str) -> Optional[str]:
     except Exception:
         return None
     return None
-
 
 def _configure_llama_logging(llama_cpp) -> None:
     global _LLAMA_LOG_CONFIGURED, _LLAMA_LOG_CALLBACK
@@ -161,20 +156,12 @@ def _configure_llama_logging(llama_cpp) -> None:
     try:
         @llama_cpp.llama_log_callback
         def _quiet_log(level, text, user_data):
-        
-            try:
-                message = (text or b"").decode("utf-8", errors="ignore").strip()
-            except Exception:
-                message = ""
-            if message and int(level) >= 3:
-                sys.stderr.write(message + "\n")
+            return
 
         _LLAMA_LOG_CALLBACK = _quiet_log
         llama_cpp.llama_log_set(_LLAMA_LOG_CALLBACK, None)
     except Exception:
-    
         pass
-
 
 def _patch_llama_model_del(llama_cpp) -> None:
     try:
@@ -191,7 +178,6 @@ def _patch_llama_model_del(llama_cpp) -> None:
             try:
                 original_del(self)
             except AttributeError:
-                
                 pass
             except Exception:
                 pass
@@ -210,7 +196,6 @@ def ensure_llama_cpp():
     except Exception:
         return None
 
-
 class OutputFilter:
     def __init__(self):
         self.buffer = ""
@@ -226,442 +211,338 @@ class OutputFilter:
         
         while i < n:
             if self.buffer[i] == '<' and i + 1 < n and self.buffer[i+1] == '|':
-               
                 tag_start = i
                 i += 2  
                 tag_name = ""
                 
-               
                 while i < n and self.buffer[i] != '|' and self.buffer[i] != '>':
                     tag_name += self.buffer[i]
                     i += 1
                 
                 if i < n and self.buffer[i] == '|' and i + 1 < n and self.buffer[i+1] == '>':
-                  
                     i += 2  
                     tag = f"<|{tag_name}|>"
-                    
                     
                     if tag_name.startswith("im_start") or tag_name.startswith("system") or tag_name.startswith("user"):
                         self.in_tag = True
                         self.current_tag = tag_name
                         continue
-                   
                     elif tag_name.startswith("/im_start") or tag_name.startswith("/system") or tag_name.startswith("/user"):
                         self.in_tag = False
                         self.current_tag = ""
                         continue
-                    
                     elif tag_name in self.keep_tags:
                         result.append(tag)
                 else:
-                    
                     result.append(self.buffer[tag_start:i])
             else:
-                
                 if not self.in_tag:
                     result.append(self.buffer[i])
                 i += 1
-        
         
         self.buffer = self.buffer[i:] if i < n else ""
         return "".join(result)
 
 class SimpleGGUFLoader:
-    
     def __init__(self, models_dir="./models"):
         self.models_dir = models_dir
         self.model = None
         self.current_model = None
-        self.fast_load_mode = os.environ.get("RUN_AI_FAST_LOAD", "1").strip().lower() not in {"0", "false", "no"}
-        self._pending_load_worker: Optional[threading.Thread] = None
-        self._cached_total_ram_mb: Optional[int] = None
-        self._cached_gpu_vram_mb: Optional[int] = None
+        self._pending_load_worker = None
+        self._cached_total_ram_mb = None
+        self._cached_gpu_vram_mb = None
         self._gpu_probe_attempted = False
-        self._progress_active = False
-        self._progress_pct = 0
-        self._progress_last_len = 0
-        self._progress_frame = 0
-        self._progress_current = 0
-        self._progress_total = 1
-        self._progress_desc = ""
-        self._progress_started_at = 0.0
-        self._progress_lock = threading.Lock()
-        self._progress_stop_event = None
-        self._progress_thread = None
-        
+        self.fast_load_mode = False
+
         if not os.path.exists(self.models_dir):
             os.makedirs(self.models_dir)
-    
-    def _print_progress(self, current: int, total: int, desc: str = "") -> None:
-        with self._progress_lock:
-            self._progress_current = current
-            self._progress_total = total
-            self._progress_desc = desc
-            self._progress_pct = int((current / max(total, 1)) * 100)
-            
-            if not self._progress_active:
-                self._progress_active = True
-                self._progress_started_at = time.time()
-                self._progress_stop_event = threading.Event()
-                self._progress_thread = threading.Thread(target=self._progress_worker)
-                self._progress_thread.daemon = True
-                self._progress_thread.start()
 
-    @staticmethod
-    def _format_progress_units(value: int) -> str:
-        try:
-            numeric = float(max(0, int(value)))
-        except Exception:
-            return str(value)
-        if numeric >= 1024 ** 3:
-            return f"{numeric / (1024 ** 3):.2f}GB"
-        if numeric >= 1024 ** 2:
-            return f"{numeric / (1024 ** 2):.1f}MB"
-        if numeric >= 1024:
-            return f"{numeric / 1024:.1f}KB"
-        return str(int(numeric))
-
-    @staticmethod
-    def _format_progress_units(value: int) -> str:
-        try:
-            numeric = float(max(0, int(value)))
-        except Exception:
-            return str(value)
-        if numeric >= 1024 ** 3:
-            return f"{numeric / (1024 ** 3):.2f}GB"
-        if numeric >= 1024 ** 2:
-            return f"{numeric / (1024 ** 2):.1f}MB"
-        if numeric >= 1024:
-            return f"{numeric / 1024:.1f}KB"
-        return str(int(numeric))
-    
-    def _progress_worker(self) -> None:
-        frames = ["|", "/", "-", "\\"]
-        stop_event = self._progress_stop_event
-        if stop_event is None:
-            return
-
-        try:
-            while not stop_event.is_set():
-                with self._progress_lock:
-                    if not self._progress_active:
-                        break
-
-                    try:
-                        width = shutil.get_terminal_size((80, 20)).columns
-                    except Exception:
-                        width = 80
-
-                    frame = frames[self._progress_frame % len(frames)]
-                    elapsed = int(max(0, time.time() - self._progress_started_at))
-                    tail = f"  {self._progress_desc}" if self._progress_desc else ""
-
-                    current = max(0, int(self._progress_current))
-                    total = max(1, int(self._progress_total))
-                    if total >= 1024 * 1024 or current >= 1024 * 1024:
-                        current_txt = self._format_progress_units(current)
-                        total_txt = self._format_progress_units(total)
-                    else:
-                        current_txt = str(current)
-                        total_txt = str(total)
-                    line = f"   {frame} loading  {elapsed:>4}s  [{current_txt}/{total_txt}]{tail}"
-
-                    if len(line) > width:
-                        line = line[:width-1] + "..."
-
-                    print("\r" + " " * self._progress_last_len, end="\r")
-                    print(line, end="", flush=True)
-                    self._progress_last_len = len(line)
-
-                    self._progress_frame += 1
-
-                time.sleep(0.1)
-        except Exception:
-         
-            pass
-
-        print("\r" + " " * self._progress_last_len, end="\r")
-
-    def _progress_newline(self) -> None:
-        thread_to_join = None
-        with self._progress_lock:
-            if self._progress_stop_event:
-                self._progress_stop_event.set()
-                if self._progress_thread and self._progress_thread.is_alive():
-                    thread_to_join = self._progress_thread
-
-            self._progress_active = False
-            self._progress_pct = 0
-            self._progress_last_len = 0
-            self._progress_frame = 0
-            self._progress_current = 0
-            self._progress_total = 1
-            self._progress_desc = ""
-            self._progress_started_at = 0.0
-
-        if thread_to_join is not None:
-            thread_to_join.join(timeout=0.2)
-
-    def _load_llama_with_timeout(
-        self,
-        llama_ctor,
-        llama_kwargs: Dict[str, Any],
-        timeout_s: int = 45,
-        attempt: int = 1,
-        total_attempts: int = 1,
-        desc: str = "",
-    ):
-        if self._pending_load_worker is not None and self._pending_load_worker.is_alive():
-            raise RuntimeError(
-                "Previous model load is still running in background after a timeout. "
-                "Wait and try again."
-            )
-
-        result: Dict[str, Any] = {"model": None, "error": None}
-
-        def _target():
-            try:
-                result["model"] = llama_ctor(**llama_kwargs)
-            except Exception as exc:
-                result["error"] = exc
-
-        worker = threading.Thread(target=_target, daemon=True)
-        self._pending_load_worker = worker
-        worker.start()
-
-        total_units = max(1, total_attempts * 100)
-        started = time.time()
-        while worker.is_alive():
-            elapsed = time.time() - started
-            if elapsed >= max(timeout_s, 1):
-                break
-           # self._print_progress(
-            #     attempt,
-            #     max(1, total_attempts),
-            #     f"{desc} ({int(elapsed)}s/{int(max(timeout_s, 1))}s)"
-            # )
-            worker.join(timeout=0.08)
-
-        if worker.is_alive():
-            raise TimeoutError(
-                f"Model loading timeout exceeded ({timeout_s}s). "
-                "Aborting retries to avoid overlapping background loads."
-            )
-        self._pending_load_worker = None
-        if result["error"] is not None:
-            raise result["error"]
-        return result["model"], time.time() - started
-
-    def list_models(self) -> List[Dict[str, Any]]:
+    def list_models(self):
         models = []
         if not os.path.exists(self.models_dir):
             return models
-            
+
         for f in os.listdir(self.models_dir):
-            if f.endswith('.gguf') and 'mmproj' not in f.lower():
+            if f.endswith(".gguf") and "mmproj" not in f.lower():
+                full = os.path.join(self.models_dir, f)
                 try:
-                    full_path = os.path.join(self.models_dir, f)
-                    size = os.path.getsize(full_path)
-                    size_mb = size / (1024 * 1024)
+                    size = os.path.getsize(full)
                     models.append({
-                        'name': f,
-                        'size': size,
-                        'size_mb': round(size_mb, 2),
-                        'path': full_path
+                        "name": f,
+                        "path": full,
+                        "size_mb": round(size / (1024 * 1024), 2)
                     })
                 except:
-                    continue
-        
-        return sorted(models, key=lambda x: x['name'])
+                    pass
 
-    def list_model_aliases(self) -> List[Dict[str, str]]:
-       
-        aliases: List[Dict[str, str]] = []
-        model_aliases = load_model_aliases()
-        for alias_name, alias_data in sorted(model_aliases.items()):
-            aliases.append({
-                "alias": alias_name,
-                "filename": alias_data.get("filename", ""),
-                "url": alias_data.get("url", ""),
-            })
-        return aliases
+        return sorted(models, key=lambda x: x["name"])
 
-    def _sanitize_filename(self, name: str) -> str:
-        allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_."
-        cleaned = "".join(ch if ch in allowed else "_" for ch in name).strip("._")
-        if not cleaned:
-            cleaned = f"model_{int(time.time())}.gguf"
-        if not cleaned.lower().endswith(".gguf"):
-            cleaned = f"{cleaned}.gguf"
-        return cleaned
+    def _find_mmproj(self, model_name):
+        base = os.path.splitext(model_name)[0]
+        candidates = [
+            f"{base}.mmproj.gguf",
+            "mmproj.gguf"
+        ]
 
-    def _resolve_download_target(self, source: str, output_name: Optional[str] = None) -> Tuple[str, str]:
-        normalized = (source or "").strip()
-        normalized_lc = normalized.lower()
-        if not normalized:
-            raise ValueError("Nie podano zrodla modelu.")
+        for f in os.listdir(self.models_dir):
+            if "mmproj" in f.lower() and f.endswith(".gguf"):
+                candidates.append(f)
 
-        model_aliases = load_model_aliases()
-        
-        if normalized in model_aliases:
-            url = model_aliases[normalized]["url"]
-            default_name = model_aliases[normalized]["filename"]
-        elif normalized_lc in model_aliases:
-            url = model_aliases[normalized_lc]["url"]
-            default_name = model_aliases[normalized_lc]["filename"]
-        elif len(normalized) >= 3:
-            matches = [k for k in model_aliases.keys() if k.startswith(normalized_lc)]
-            if len(matches) == 1:
-                chosen = matches[0]
-                url = model_aliases[chosen]["url"]
-                default_name = model_aliases[chosen]["filename"]
-            elif len(matches) > 1:
-                raise ValueError(f"Alias niejednoznaczny '{normalized}'. Mozliwe: {', '.join(sorted(matches))}")
-            else:
-                url = ""
-                default_name = ""
-        else:
-            url = ""
-            default_name = ""
+        for c in candidates:
+            path = os.path.join(self.models_dir, c)
+            if os.path.exists(path):
+                return path
 
-        if not url and normalized_lc.endswith(".gguf"):
-            model_aliases = load_model_aliases()
-            file_matches = [
-                k for k, v in model_aliases.items()
-                if v.get("filename", "").lower() == normalized_lc
-            ]
-            if len(file_matches) == 1:
-                chosen = file_matches[0]
-                url = model_aliases[chosen]["url"]
-                default_name = model_aliases[chosen]["filename"]
+        return None
 
-        if url:
-            resolved_name = self._sanitize_filename(output_name or default_name)
-            return url, resolved_name
+    def _try_load_simple(self, params, timeout_s):
+        result = {"model": None, "error": None}
+        done = threading.Event()
+        started = time.time()
+        spinner_proc = None
+        spinner_flag = None
 
-        if normalized.startswith("http://") or normalized.startswith("https://"):
-            parsed = urlparse(normalized)
-            basename = os.path.basename(parsed.path)
-            default_name = unquote(basename) if basename else f"model_{int(time.time())}.gguf"
-            url = normalized
-            resolved_name = self._sanitize_filename(output_name or default_name)
-            return url, resolved_name
-
-        if normalized.count("/") >= 2 and normalized.lower().endswith(".gguf"):
-            parts = normalized.split("/")
-            owner = parts[0]
-            repo = parts[1]
-            file_in_repo = "/".join(parts[2:])
-            url = f"https://huggingface.co/{owner}/{repo}/resolve/main/{file_in_repo}?download=true"
-            resolved_name = self._sanitize_filename(output_name or os.path.basename(file_in_repo))
-            return url, resolved_name
-
-        model_aliases = load_model_aliases()
-        if model_aliases:
-            available = ", ".join(sorted(model_aliases.keys()))
-            raise ValueError(
-                f"Nieznane zrodlo '{normalized}'. Uzyj aliasu, URL lub owner/repo/file.gguf. Dostepne aliasy: {available}"
+        try:
+            spinner_flag = os.path.join(
+                self.models_dir,
+                f".load_spinner_{os.getpid()}_{int(started * 1000)}.flag",
             )
-        raise ValueError(
-            f"Nieznane zrodlo '{normalized}'. Uzyj URL lub owner/repo/file.gguf."
-        )
+            with open(spinner_flag, "w", encoding="utf-8") as handle:
+                handle.write("1")
 
-    def _sha256_file(self, file_path: str) -> str:
-        digest = hashlib.sha256()
-        with open(file_path, "rb") as handle:
-            while True:
-                chunk = handle.read(1024 * 1024)
-                if not chunk:
-                    break
-                digest.update(chunk)
-        return digest.hexdigest()
+            spinner_code = (
+                "import os,sys,time\n"
+                "flag=sys.argv[1]\n"
+                "t0=float(sys.argv[2])\n"
+                "frames='|/-\\\\'\n"
+                "i=0\n"
+                "last=0\n"
+                "while os.path.exists(flag):\n"
+                "    elapsed=max(0.0,time.time()-t0)\n"
+                "    line=f'\\r{frames[i%4]} [time: {elapsed:.2f}s]'\n"
+                "    sys.stdout.write(line)\n"
+                "    sys.stdout.flush()\n"
+                "    last=max(last,len(line))\n"
+                "    i += 1\n"
+                "    time.sleep(0.05)\n"
+                "sys.stdout.write('\\r' + (' ' * max(40,last)) + '\\r')\n"
+                "sys.stdout.flush()\n"
+            )
+            spinner_proc = subprocess.Popen(
+                [sys.executable, "-u", "-c", spinner_code, spinner_flag, str(started)]
+            )
+        except Exception:
+            spinner_proc = None
+            spinner_flag = None
 
-    def download_model(
-        self,
-        source: str,
-        output_name: Optional[str] = None,
-        overwrite: bool = False
-    ) -> Dict[str, Any]:
-        url, filename = self._resolve_download_target(source, output_name)
-        destination = os.path.join(self.models_dir, filename)
-        partial = f"{destination}.part"
-
-        if os.path.exists(destination) and not overwrite:
-            return {
-                "status": "already_exists",
-                "name": filename,
-                "path": destination,
-                "size": os.path.getsize(destination),
-                "sha256": self._sha256_file(destination),
-            }
-
-        if os.path.exists(partial):
+        def worker():
             try:
-                os.remove(partial)
+                llama_cpp = ensure_llama_cpp()
+                if llama_cpp is None:
+                    result["error"] = "llama-cpp-python not installed"
+                    return
+                result["model"] = llama_cpp.Llama(**params)
+            except Exception as e:
+                result["error"] = str(e)
+            finally:
+                done.set()
+
+        t = threading.Thread(target=worker, daemon=True)
+        t.start()
+
+        while not done.wait(0.05):
+            if (time.time() - started) >= timeout_s:
+                break
+
+        if spinner_flag:
+            with contextlib.suppress(Exception):
+                os.remove(spinner_flag)
+        if spinner_proc is not None:
+            with contextlib.suppress(Exception):
+                spinner_proc.wait(timeout=0.4)
+            if spinner_proc.poll() is None:
+                with contextlib.suppress(Exception):
+                    spinner_proc.terminate()
+                with contextlib.suppress(Exception):
+                    spinner_proc.wait(timeout=0.3)
+
+        if not done.is_set():
+            return False, f"Timeout > {timeout_s}s"
+
+        if result["error"]:
+            return False, result["error"]
+
+        return True, result["model"]
+
+    def _load_model_stable(self, path, try_gpu=True, timeout_s=40, mmproj=None):
+        file_size_mb = os.path.getsize(path) / (1024 * 1024)
+        cpu_threads = max(2, min(8, (os.cpu_count() or 8) // 2))
+        raw_ctx = os.environ.get("RUN_AI_N_CTX", "").strip()
+        try:
+            preferred_ctx = int(raw_ctx) if raw_ctx else 8192
+        except Exception:
+            preferred_ctx = 8192
+        preferred_ctx = max(2048, min(65536, preferred_ctx))
+        fast_ctx = preferred_ctx
+        cpu_ctx = preferred_ctx
+
+        gpu_params = {
+            "model_path": path,
+            "n_gpu_layers": -1,
+            "n_ctx": fast_ctx,
+            "n_batch": 128,
+            "n_threads": max(2, (os.cpu_count() or 8) - 1),
+            "use_mmap": True,
+            "use_mlock": False,
+            "verbose": False,
+        }
+
+        cpu_params = {
+            "model_path": path,
+            "n_gpu_layers": 0,
+            "n_ctx": cpu_ctx,
+            "n_batch": 64,
+            "n_threads": cpu_threads,
+            "use_mmap": True,
+            "use_mlock": False,
+            "verbose": False,
+        }
+
+        if mmproj:
+            gpu_params["mmproj"] = mmproj
+            cpu_params["mmproj"] = mmproj
+
+        if try_gpu:
+            ok, model = self._try_load_simple(gpu_params, timeout_s)
+            if ok:
+                return {"ok": True, "model": model}
+
+        ok, model = self._try_load_simple(cpu_params, timeout_s)
+        if ok:
+            return {"ok": True, "model": model}
+
+        return {"ok": False, "error": model}
+
+    def load(self, model_name, show_try_errors=False):
+        llama_cpp = ensure_llama_cpp()
+        if llama_cpp is None:
+            print("ERROR: llama-cpp-python not installed")
+            return False
+
+        if self._pending_load_worker is not None:
+            if self._pending_load_worker.is_alive():
+                print("ERROR: Previous model load is still running in background.")
+                print("   Wait a moment and try again.")
+                return False
+            self._pending_load_worker = None
+
+        if model_name.isdigit():
+            models = self.list_models()
+            idx = int(model_name) - 1
+            if 0 <= idx < len(models):
+                model_name = models[idx]["name"]
+            else:
+                print("Invalid model number")
+                return False
+
+        model_path = os.path.join(self.models_dir, model_name)
+        if not os.path.exists(model_path):
+            print("Model not found:", model_name)
+            return False
+
+        is_vision = any(x in model_name.lower() for x in [
+            "llava", "bakllava", "cogvlm", "minicpm-v", "qwen3-vl", "qwen-vl"
+        ])
+
+        mmproj = self._find_mmproj(model_name) if is_vision else None
+        if is_vision and not mmproj:
+            print("Vision model requires mmproj file!")
+            return False
+
+        timeout_s = 180
+        raw_timeout = os.environ.get("RUN_AI_LOAD_TIMEOUT_S", "").strip()
+        if raw_timeout:
+            try:
+                parsed_timeout = int(raw_timeout)
+                if parsed_timeout > 0:
+                    timeout_s = max(15, min(1800, parsed_timeout))
             except Exception:
                 pass
 
-        bytes_read = 0
-        total_bytes = 0
-        print(f"Loading model: {filename}")
-        print(f"Source: {source}")
+        try_gpu_env = os.environ.get("RUN_AI_TRY_GPU", "auto").strip().lower()
+        if try_gpu_env in {"1", "true", "yes", "on"}:
+            try_gpu = True
+        elif try_gpu_env in {"0", "false", "no", "off"}:
+            try_gpu = False
+        else:
+            try_gpu = False
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    vram_mb = int(torch.cuda.get_device_properties(0).total_memory // (1024 * 1024))
+                    try_gpu = vram_mb >= max(4096, int(os.path.getsize(model_path) / (1024*1024) * 0.75))
+            except Exception:
+                try_gpu = False
+
+        load_started = time.time()
+        result = self._load_model_stable(
+            model_path,
+            try_gpu=try_gpu,
+            timeout_s=timeout_s,
+            mmproj=mmproj
+        )
+
+        if result["ok"]:
+            self.model = result["model"]
+            self.current_model = model_name
+            load_elapsed = max(0.0, time.time() - load_started)
+            print(f"[time: {load_elapsed:.2f}s]")
+            return True
+
+        print("Load failed:", result["error"])
+        return False
+
+    def generate(self, prompt: str, max_tokens: int = 512, temperature: float = 0.7,
+                top_p: float = 0.9, stream: bool = False, **kwargs) -> Union[str, None]:
+        if not self.model:
+            raise ValueError("No model loaded. Use 'load' first.")
 
         try:
-            request = Request(
-                url,
-                headers={
-                    "User-Agent": f"run.py/{VERSION}",
-                    "Accept": "*/*",
-                },
+            if stream:
+                return self._stream_response(prompt, max_tokens, temperature, top_p, **kwargs)
+            response = self.model(
+                prompt=prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                **kwargs,
             )
-            with urlopen(request, timeout=60) as response:
-                content_len = response.headers.get("Content-Length", "0")
-                try:
-                    total_bytes = int(content_len)
-                except Exception:
-                    total_bytes = 0
+            return response['choices'][0]['text'].strip()
+        except Exception as e:
+            print(f"Error while generating response: {e}")
+            raise
 
-                with open(partial, "wb") as output:
-                    while True:
-                        block = response.read(1024 * 1024 * 2)
-                        if not block:
-                            break
-                        output.write(block)
-                        bytes_read += len(block)
-                        # self._print_progress(
-                        #     bytes_read,
-                        #     total_bytes if total_bytes > 0 else max(bytes_read, 1),
-                        #     f"download {filename}"
-                        # )
-        except HTTPError as exc:
-            raise RuntimeError(f"HTTP {exc.code}: {exc.reason}") from exc
-        except URLError as exc:
-            raise RuntimeError(f"Connection error: {exc}") from exc
-        finally:
-            self._progress_newline()
+    def _stream_response(self, prompt: str, max_tokens: int, temperature: float,
+                        top_p: float, **kwargs) -> str:
+        try:
+            cancel_event = kwargs.pop("cancel_event", None)
+            response = self.model(
+                prompt=prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                stream=True,
+                **kwargs,
+            )
 
-        if bytes_read == 0:
-            if os.path.exists(partial):
-                os.remove(partial)
-            raise RuntimeError("Downloaded 0 bytes.")
-
-        os.replace(partial, destination)
-
-        with open(destination, "rb") as model_file:
-            header = model_file.read(4)
-        if header != b"GGUF":
-            os.remove(destination)
-            raise RuntimeError("Downloaded file is not a valid GGUF model.")
-
-        return {
-            "status": "downloaded",
-            "name": filename,
-            "path": destination,
-            "size": os.path.getsize(destination),
-            "sha256": self._sha256_file(destination),
-            "url": url,
-        }
+            for chunk in response:
+                if cancel_event is not None and cancel_event.is_set():
+                    break
+                token = chunk['choices'][0]['text']
+                yield token
+        except Exception as e:
+            print(f"Error while streaming response: {e}")
+            raise
 
     def _resolve_load_timeout_s(self, file_size_mb: float, is_vision: bool) -> int:
         raw = os.environ.get("RUN_AI_LOAD_TIMEOUT_S", "").strip()
@@ -677,293 +558,6 @@ class SimpleGGUFLoader:
         per_gb_s = 18 if is_vision else 10
         computed = int(base_s + (max(file_size_mb, 0.0) / 1024.0) * per_gb_s)
         return max(base_s, min(300, computed))
-    
-    def load(self, model_name: str, show_try_errors: bool = False) -> bool:
-        import os
-        llama_cpp = ensure_llama_cpp()
-        if llama_cpp is None:
-            print("ERROR: llama-cpp-python is not installed. Run: install")
-            return False
-
-        if self._pending_load_worker is not None:
-            if self._pending_load_worker.is_alive():
-                print("ERROR: Previous model load is still finishing in background.")
-                print("   Wait 10-20 seconds and try again.")
-                return False
-            self._pending_load_worker = None
-
-        selector = (model_name or "").strip()
-        if selector.isdigit():
-            models = self.list_models()
-            idx = int(selector) - 1
-            if 0 <= idx < len(models):
-                model_name = models[idx]["name"]
-            else:
-                print(f"ERROR: Invalid model number: {selector}")
-                return False
-
-        if "mmproj" in model_name.lower():
-            print("ERROR: mmproj is an add-on for vision models and cannot be loaded alone.")
-            return False
-
-        model_path = os.path.join(self.models_dir, model_name)
-        if not os.path.exists(model_path):
-            print(f"ERROR: File {model_name} does not exist in {self.models_dir}/")
-            return False
-
-        try:
-            file_size = os.path.getsize(model_path)
-            file_size_mb = file_size / (1024 * 1024)
-            model_name_lc = model_name.lower()
-
-            with open(model_path, 'rb') as f:
-                header = f.read(4)
-                if header != b'GGUF':
-                    print(f"ERROR: {model_name} is not a valid GGUF file")
-                    return False
-
-            vision_markers = ('llava', 'bakllava', 'cogvlm', 'minicpm-v', 'qwen3-vl', 'qwen-vl')
-            is_vision = any(marker in model_name_lc for marker in vision_markers)
-            mmproj_path = self._find_mmproj(model_name) if is_vision else None
-            if is_vision and not mmproj_path:
-                print("ERROR: Vision model detected but mmproj file was not found.")
-                print("   Download mmproj and place it in ./models/")
-                print("   Hint: use alias 'qwen3-vl-4b-mmproj'")
-                return False
-
-            param_combinations = []
-
-            if file_size > 10 * 1024 * 1024 * 1024:
-                param_combinations = [
-                    {"n_gpu_layers": -1, "n_ctx": 1024, "n_batch": 128, "n_threads": 0, "desc": "GPU + CPU, fastest init"},
-                    {"n_gpu_layers": 0, "n_ctx": 1024, "n_batch": 128, "n_threads": 0, "desc": "CPU, safe load"},
-                    {"n_gpu_layers": 0, "n_ctx": 1024, "n_batch": 128, "n_threads": 2, "desc": "CPU, minimal context"},
-                ]
-            elif file_size > 4 * 1024 * 1024 * 1024:
-                param_combinations = [
-                    {"n_gpu_layers": -1, "n_ctx": 2048, "n_batch": 128, "n_threads": 0, "desc": "GPU, fastest init"},
-                    {"n_gpu_layers": -1, "n_ctx": 1024, "n_batch": 96, "n_threads": 0, "desc": "GPU, reduced context"},
-                    {"n_gpu_layers": 0, "n_ctx": 2048, "n_batch": 128, "n_threads": 0, "desc": "CPU fallback"},
-                ]
-            elif file_size > 1 * 1024 * 1024 * 1024:
-                param_combinations = [
-                    {"n_gpu_layers": -1, "n_ctx": 2048, "n_batch": 128, "n_threads": 0, "desc": "GPU, fastest init"},
-                    {"n_gpu_layers": -1, "n_ctx": 1024, "n_batch": 96, "n_threads": 0, "desc": "GPU, reduced context"},
-                    {"n_gpu_layers": 20, "n_ctx": 1024, "n_batch": 96, "n_threads": 0, "desc": "Memory saving"},
-                ]
-            else:
-                param_combinations = [
-                    {"n_gpu_layers": -1, "n_ctx": 2048, "n_batch": 128, "n_threads": 0, "desc": "Fast generation"},
-                    {"n_gpu_layers": -1, "n_ctx": 1024, "n_batch": 96, "n_threads": 0, "desc": "Very fast generation"},
-                    {"n_gpu_layers": 0, "n_ctx": 2048, "n_batch": 128, "n_threads": 0, "desc": "CPU fallback"},
-                ]
-
-            if is_vision:
-                param_combinations.insert(0, {
-                    "n_gpu_layers": -1,
-                    "n_ctx": 2048,
-                    "n_batch": 128,
-                    "n_threads": 0,
-                    "desc": "Vision fast init",
-                    "mmproj": mmproj_path,
-                })
-                param_combinations.append({
-                    "n_gpu_layers": 0,
-                    "n_ctx": 1024,
-                    "n_batch": 96,
-                    "n_threads": 0,
-                    "desc": "Vision CPU fallback",
-                    "mmproj": mmproj_path,
-                })
-
-            while len(param_combinations) < 3:
-                last = param_combinations[-1].copy()
-                last["n_ctx"] = max(512, last.get("n_ctx", 2048) // 2)
-                last["n_batch"] = max(64, last.get("n_batch", 256) // 2)
-                last["n_threads"] = min(8, (last.get("n_threads", 0) or 1) * 2)
-                last["desc"] = f"Fallback {len(param_combinations) - 2}"
-                param_combinations.append(last)
-
-            if not self.fast_load_mode:
-                total_ram = self._get_total_ram_mb()
-                gpu_vram = self._get_gpu_vram_mb()
-                smart_params = self._get_smart_params(file_size_mb, total_ram, gpu_vram)
-                if smart_params:
-                    param_combinations.insert(0, smart_params)
-
-            deduped: List[Dict[str, Any]] = []
-            seen = set()
-            for params in param_combinations:
-                key = (
-                    params.get("n_gpu_layers"),
-                    params.get("n_ctx"),
-                    params.get("n_batch"),
-                    params.get("n_threads"),
-                    params.get("mmproj"),
-                )
-                if key in seen:
-                    continue
-                seen.add(key)
-                deduped.append(params)
-
-            max_attempts = 2 if is_vision else 3
-            param_combinations = deduped[:max_attempts]
-
-            if self.model and self.current_model == model_name:
-                print(f"Model {model_name} is already loaded.")
-                return True
-
-            if self.model:
-                self.unload()
-
-            total_attempts = len(param_combinations)
-            timeout_s = self._resolve_load_timeout_s(file_size_mb, is_vision)
-            last_error = "unknown error"
-            timed_out = False
-            for attempt, params in enumerate(param_combinations, 1):
-                desc = params.get('desc', f"Attempt {attempt}/{total_attempts}")
-                # self._print_progress(attempt, total_attempts, desc)
-
-                try:
-                    llama_kwargs = {
-                        'model_path': model_path,
-                        'n_ctx': params.get('n_ctx', 2048),
-                        'n_batch': params.get('n_batch', 128),
-                        'n_threads': max(1, int(params.get('n_threads') or max(1, (os.cpu_count() or 4) - 1))),
-                        'n_gpu_layers': params.get('n_gpu_layers', 0),
-                        'use_mmap': True,
-                        'use_mlock': False,
-                        'verbose': False,
-                    }
-
-                    if 'mmproj' in params and params['mmproj']:
-                        llama_kwargs['mmproj'] = params['mmproj']
-                        llama_kwargs['n_ctx'] = min(llama_kwargs['n_ctx'], 4096)
-
-                    import time
-                    spinner_chars = ['|', '/', '-', '\\']
-                    start_time = time.time()
-                    
-                    import threading
-                    import sys
-                    import os
-                    spinner_active = True
-                    
-                    def spinner_thread():
-                        while spinner_active:
-                            current_time = time.time() - start_time
-                            spinner = spinner_chars[int(current_time * 10) % 4]
-                            print(f"\r{spinner} [time: {current_time:.1f}s]", end="", flush=True)
-                            time.sleep(0.1)
-                    
-                    spinner_t = threading.Thread(target=spinner_thread, daemon=True)
-                    spinner_t.start()
-                    
-                    original_stdout = sys.stdout
-                    original_stderr = sys.stderr
-                    
-                    class DevNull:
-                        def write(self, text):
-                            pass
-                        def flush(self):
-                            pass
-                    
-                    sys.stdout = DevNull()
-                    sys.stderr = DevNull()
-                    
-                    try:
-                    
-                        self.model, elapsed = self._load_llama_with_timeout(
-                            llama_cpp.Llama,
-                            llama_kwargs,
-                            timeout_s=timeout_s,
-                            attempt=attempt,
-                            total_attempts=total_attempts,
-                            desc=desc,
-                        )
-                        self.current_model = model_name
-                    finally:
-                        
-                        sys.stdout = original_stdout
-                        sys.stderr = original_stderr
-                    
-                    spinner_active = False
-                    time.sleep(0.2)  
-                    
-                    print("\r" + " " * 50 + "\r", end="")  
-                    self._progress_newline()
-                    print(f"  [time: {elapsed:.2f} sek]")
-                    
-                    return True
-
-                except TimeoutError as e:
-                    last_error = str(e)
-                    timed_out = True
-                    if show_try_errors:
-                        self._progress_newline()
-                        print(f"     ERROR: Attempt timed out: {e}")
-                    break
-                except Exception as e:
-                    last_error = str(e)
-                    normalized_error = last_error.lower()
-                    is_deterministic_load_error = (
-                        "failed to load model from file" in normalized_error
-                        or "unknown model architecture" in normalized_error
-                        or "unsupported model architecture" in normalized_error
-                    )
-                    if is_deterministic_load_error:
-                        if show_try_errors:
-                            self._progress_newline()
-                            print(f"     ERROR: Attempt failed: {e}")
-                        break
-                    if show_try_errors:
-                        self._progress_newline()
-                        print(f"     ERROR: Attempt failed: {e}")
-                        if "memory" in str(e).lower() or "out of memory" in str(e).lower():
-                            import gc
-                            gc.collect()
-                            print("     INFO: Garbage collection executed...")
-
-            self._progress_newline()
-            print(f"ERROR: Failed to load model {model_name} after {total_attempts} attempts.")
-            print(f"   Last error: {last_error}")
-            if timed_out:
-                print(f"   Hint: loading timeout was {timeout_s}s.")
-                print("   Hint: set RUN_AI_LOAD_TIMEOUT_S=120 (or higher for very large models).")
-            if "failed to load model from file" in last_error.lower():
-                print("   Hint: run 'update' to refresh llama-cpp-python.")
-                if is_vision:
-                    print("   Hint: vision model support depends on llama-cpp-python build/version.")
-            return False
-
-        except Exception as e:
-            self._progress_newline()
-            print(f"ERROR: Critical error while loading model: {e}")
-            import traceback
-            traceback.print_exc()
-            return False
-
-    def _find_mmproj(self, model_name: str) -> Optional[str]:
-        model_full_path = os.path.join(self.models_dir, model_name)
-        model_dir = os.path.dirname(model_full_path) or self.models_dir
-        model_stem = os.path.splitext(os.path.basename(model_name))[0]
-        mmproj_candidates = [
-            os.path.join(model_dir, f"{model_stem}.mmproj.gguf"),
-            os.path.join(model_dir, "mmproj.gguf"),
-        ]
-
-        try:
-            for entry in os.listdir(model_dir):
-                entry_lc = entry.lower()
-                if entry_lc.endswith(".gguf") and "mmproj" in entry_lc:
-                    mmproj_candidates.append(os.path.join(model_dir, entry))
-        except Exception:
-            pass
-
-        for candidate in mmproj_candidates:
-            if os.path.exists(candidate):
-                return candidate
-        return None
 
     def _get_total_ram_mb(self) -> int:
         if self._cached_total_ram_mb is not None:
@@ -1058,49 +652,74 @@ class SimpleGGUFLoader:
         except Exception:
             return max(1, len(text.split()))
 
-    def generate(self, prompt: str, max_tokens: int = 512, temperature: float = 0.7,
-                top_p: float = 0.9, stream: bool = False, **kwargs) -> Union[str, None]:
-        if not self.model:
-            raise ValueError("No model loaded. Use 'load' first.")
+    def download_model(self, source: str, output_name: Optional[str] = None, overwrite: bool = False) -> Dict[str, Any]:
+        import urllib.request
+        import urllib.error
+        
+        if not os.path.exists(self.models_dir):
+            os.makedirs(self.models_dir)
+        
+        if source.startswith(('http://', 'https://', 'file://')):
+            url = source
+            filename = output_name or os.path.basename(urlparse(source).path) or "model.gguf"
+        else:
+            filename = output_name or source
+            if not filename.endswith('.gguf'):
+                filename += '.gguf'
+            if os.path.exists(source):
+                dest = os.path.join(self.models_dir, filename)
+                if os.path.exists(dest) and not overwrite:
+                    return {
+                        "status": "already_exists",
+                        "name": filename,
+                        "path": dest,
+                        "size": os.path.getsize(dest),
+                        "sha256": self._sha256_file(dest),
+                    }
+                shutil.copy2(source, dest)
+                return {
+                    "status": "downloaded",
+                    "name": filename,
+                    "path": dest,
+                    "size": os.path.getsize(dest),
+                    "sha256": self._sha256_file(dest),
+                }
+            else:
+                raise ValueError(f"Source not found: {source}")
+        
+        destination = os.path.join(self.models_dir, filename)
+        
+        if os.path.exists(destination) and not overwrite:
+            return {
+                "status": "already_exists",
+                "name": filename,
+                "path": destination,
+                "size": os.path.getsize(destination),
+                "sha256": self._sha256_file(destination),
+            }
+        
+        print(f"Downloading from {url}...")
+        urllib.request.urlretrieve(url, destination)
+        
+        return {
+            "status": "downloaded",
+            "name": filename,
+            "path": destination,
+            "size": os.path.getsize(destination),
+            "sha256": self._sha256_file(destination),
+        }
+    
+    def _sha256_file(self, filepath: str) -> str:
+        sha256_hash = hashlib.sha256()
+        with open(filepath, "rb") as f:
+            for byte_block in iter(lambda: f.read(4096), b""):
+                sha256_hash.update(byte_block)
+        return sha256_hash.hexdigest()
 
-        try:
-            if stream:
-                return self._stream_response(prompt, max_tokens, temperature, top_p, **kwargs)
-            response = self.model(
-                prompt=prompt,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                top_p=top_p,
-                **kwargs,
-            )
-            return response['choices'][0]['text'].strip()
-        except Exception as e:
-            print(f"Error while generating response: {e}")
-            raise
-
-    def _stream_response(self, prompt: str, max_tokens: int, temperature: float,
-                        top_p: float, **kwargs) -> str:
-        try:
-            response = self.model(
-                prompt=prompt,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                top_p=top_p,
-                stream=True,
-                **kwargs,
-            )
-
-            full_response = ""
-            for chunk in response:
-                token = chunk['choices'][0]['text']
-                full_response += token
-                yield token
-        except Exception as e:
-            print(f"Error while streaming response: {e}")
-            raise
+    def list_model_aliases(self):
+        return []
 
 class OllamaAPIHandler(http.server.BaseHTTPRequestHandler):
-    
     def _set_headers(self, status_code=200, content_type='application/json'):
         self.send_response(status_code)
         self.send_header('Content-Type', content_type)
@@ -1148,7 +767,6 @@ class OllamaAPIHandler(http.server.BaseHTTPRequestHandler):
             }).encode())
 
     def do_POST(self):
-        """Handle POST requests."""
         try:
             parsed_path = urlparse(self.path)
             path = parsed_path.path
@@ -1203,14 +821,14 @@ class OllamaAPIHandler(http.server.BaseHTTPRequestHandler):
                 {
                     "name": m['name'],
                     "modified_at": datetime.now().isoformat() + "Z",
-                    "size": m['size'],
+                    "size": int(m['size_mb'] * 1024 * 1024),
                     "digest": hashlib.sha256(m['name'].encode()).hexdigest(),
                     "details": {
                         "format": "gguf",
-                        "family": "llama",  
+                        "family": "llama",
                         "families": ["llama"],
-                        "parameter_size": "7B",  
-                    "quantization_level": "Q4_0"  
+                        "parameter_size": "7B",
+                        "quantization_level": "Q4_0"
                     }
                 }
                 for m in models
@@ -1229,7 +847,7 @@ class OllamaAPIHandler(http.server.BaseHTTPRequestHandler):
             return
 
         model_info = {
-            "license": "Own",
+            "license": "MIT",
             "modelfile": f"# Modelfile for {loader.current_model}\nFROM {loader.current_model}",
             "parameters": "num_ctx 4096",
             "template": "{{ if .System }}<|system|>\n{{ .System }}<|end|>\n{{ end }}{{ .Prompt }}<|end|>\n<|assistant|>",
@@ -1462,8 +1080,50 @@ class OllamaAPIHandler(http.server.BaseHTTPRequestHandler):
         self.send_header('Connection', 'keep-alive')
         self.end_headers()
         
-
-
+        try:
+            if not loader or not loader.model:
+                self.wfile.write(b'data: {"error": "No model loaded"}\n\n')
+                return
+            
+            full_response = ""
+            for token in loader.generate(prompt, max_tokens, temperature, top_p, stream=True):
+                if token:
+                    full_response += token
+                    response_data = {
+                        "model": loader.current_model or "unknown",
+                        "created_at": time.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+                        "message": {
+                            "role": "assistant",
+                            "content": full_response
+                        },
+                        "done": False
+                    }
+                    self.wfile.write(f'data: {json.dumps(response_data)}\n\n'.encode())
+                    self.wfile.flush()
+            
+            final_data = {
+                "model": loader.current_model or "unknown",
+                "created_at": time.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+                "message": {
+                    "role": "assistant",
+                    "content": full_response
+                },
+                "done": True,
+                "total_duration": 0,
+                "load_duration": 0,
+                "prompt_eval_count": 0,
+                "prompt_eval_duration": 0,
+                "eval_count": len(full_response.split()) if full_response else 0,
+                "eval_duration": 0
+            }
+            self.wfile.write(f'data: {json.dumps(final_data)}\n\n'.encode())
+            self.wfile.flush()
+            
+        except Exception as e:
+            error_data = {"error": f"Streaming error: {str(e)}"}
+            self.wfile.write(f'data: {json.dumps(error_data)}\n\n'.encode())
+            self.wfile.flush()
+        
     def _handle_pull(self, data: Dict):
         source = str(data.get("name") or data.get("model") or data.get("source") or "").strip()
         output_name = data.get("filename") or data.get("output")
@@ -1511,7 +1171,6 @@ class OllamaAPIHandler(http.server.BaseHTTPRequestHandler):
 class ReusableTCPServer(socketserver.TCPServer):
     allow_reuse_address = True
 
-
 def start_http_server(port: int = HTTP_PORT) -> socketserver.TCPServer:
     httpd = None
     selected_port = port
@@ -1550,14 +1209,12 @@ def start_http_server(port: int = HTTP_PORT) -> socketserver.TCPServer:
     thread.start()
     return httpd
 
-
 def clear_screen():
     stdin_ok = hasattr(sys.stdin, "isatty") and sys.stdin.isatty()
     stdout_ok = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
     if not (stdin_ok and stdout_ok):
         return
     os.system('cls' if os.name == 'nt' else 'clear')
-
 
 def _read_terminal_line(prompt: str) -> str:
     stdin_ok = hasattr(sys.stdin, "isatty") and sys.stdin.isatty()
@@ -1596,7 +1253,6 @@ def _read_terminal_line(prompt: str) -> str:
             return "\x1b"
 
         if ch in ("\x00", "\xe0"):
-            
             try:
                 _ = msvcrt.getwch()
             except Exception:
@@ -1614,15 +1270,64 @@ def _read_terminal_line(prompt: str) -> str:
         sys.stdout.write(ch)
         sys.stdout.flush()
 
+def _consume_escape_keypress() -> bool:
+    if os.name != "nt":
+        return False
+    try:
+        import msvcrt
+    except Exception:
+        return False
+
+    pressed = False
+    while msvcrt.kbhit():
+        ch = msvcrt.getwch()
+        if ch in ("\x00", "\xe0"):
+            try:
+                _ = msvcrt.getwch()
+            except Exception:
+                pass
+            continue
+        if ch == "\x1b":
+            pressed = True
+    return pressed
+
+def get_terminal_width():
+    try:
+        import shutil
+        return shutil.get_terminal_size().columns
+    except:
+        return 80  
 
 def print_welcome():
     clear_screen()
-    print("\n" + "=" * 60)
-    print("                 CMD LOCAL AI")
-    print("=" * 60)
-    print(f"   HTTP Server: http://localhost:{HTTP_PORT}")
-    print("=" * 60)
+    
+    terminal_width = get_terminal_width()
+    terminal_width = max(terminal_width, 40)
 
+    ascii_title = r"""
+ ██████╗ ███╗   ███╗██████╗  █████╗ ██╗
+██╔════╝ ████╗ ████║██╔══██╗██╔══██╗██║
+██║      ██╔████╔██║██║  ██║███████║██║
+██║      ██║╚██╔╝██║██║  ██║██╔══██║██║
+╚██████╗ ██║ ╚═╝ ██║██████╔╝██║  ██║██║
+ ╚═════╝ ╚═╝     ╚═╝╚═════╝ ╚═╝  ╚═╝╚═╝
+"""
+
+    print("\n" + "=" * terminal_width)
+
+    for line in ascii_title.splitlines():
+        if line.strip() == "":
+            print()
+        else:
+            padding = (terminal_width - len(line)) // 2
+            print(" " * max(padding, 0) + line)
+
+    print("=" * terminal_width)
+
+    server_text = f"   HTTP Server: http://localhost:{HTTP_PORT}"
+    print(server_text)
+
+    print("=" * terminal_width)
 
 def _print_help_section(title: str, rows: List[Tuple[str, str]]) -> None:
     if not rows:
@@ -1633,14 +1338,11 @@ def _print_help_section(title: str, rows: List[Tuple[str, str]]) -> None:
     for command, description in rows:
         print(f"  {command.ljust(command_width)}  {description}")
 
-
 def show_quick_commands() -> None:
-    print("\nQuick commands: models | load | ai | chat <text> | /pause | help | exit")
+    print("\nQuick commands: models | load | /swap | ai | chat <text> | /pause | help | exit")
     print("Tips: Esc unloads current model (app keeps running).")
 
-
 def show_help():
-    
     term_width = shutil.get_terminal_size().columns
     
     if term_width < 80:
@@ -1653,11 +1355,11 @@ def show_help():
     print(f"{'HELP':^{term_width}}")
     print("=" * term_width)
     
-    
     models_cmds = [
         ("models", "List local GGUF models"),
         ("load", "Choose model from list"),
         ("load <name>", "Load specific model"),
+        ("/swap [name]", "Swap model and keep chat history"),
         ("catalog", "Show downloadable aliases"),
         ("download <url>", "Download model"),
         ("pull <url>", "Alias for download"),
@@ -1746,7 +1448,6 @@ def show_help():
     if LAST_UPDATE_STATUS is not None:
         print(f"\n   Update status: {LAST_UPDATE_STATUS}")
 
-
 def show_models_menu():
     if not HAS_AI_ENGINE:
         print("\n" + "=" * 60)
@@ -1781,8 +1482,7 @@ def show_models_menu():
         print(f"\n{i:2d}. {model['name']} ({size_str})")
 
     print("\n" + "=" * 60)
-    print("  Enter model number to load (or 'q' to cancel):")
-
+    print("  Enter model number to load (or 'q' / Esc to cancel):")
 
 def show_download_catalog():
     aliases = loader.list_model_aliases() if loader else []
@@ -1799,7 +1499,6 @@ def show_download_catalog():
     print("=" * 60)
     print("Usage: download <alias|url|owner/repo/file.gguf> [file.gguf]")
 
-
 def show_status():
     print("\n" + "=" * 60)
     print("  SYSTEM STATUS")
@@ -1812,7 +1511,7 @@ def show_status():
     print("\nMODEL:")
     if loader and loader.current_model:
         print(f"  LOADED: {loader.current_model}")
-        if hasattr(loader, 'model'):
+        if hasattr(loader, 'model') and loader.model:
             print(f"  Context: {loader.model.n_ctx} tokens")
             print(f"  GPU layers: {loader.model.n_gpu_layers if hasattr(loader.model, 'n_gpu_layers') else 'none'}")
     else:
@@ -1822,7 +1521,6 @@ def show_status():
     print(f"  Status: {'RUNNING' if http_server else 'STOPPED'}")
     print(f"  Address: http://localhost:{HTTP_PORT}")
     print("\n" + "=" * 60)
-
 
 def _reasoning_stop_tokens() -> List[str]:
     return [
@@ -1841,35 +1539,34 @@ def _reasoning_stop_tokens() -> List[str]:
         "\nQuestion:",
     ]
 
+def _build_answer_only_prompt(user_text: str, history: Optional[List[Dict[str, str]]] = None) -> str:
+    lines = []
+    
+    lines.append("<|system|>")
+    lines.append("Jesteś pomocnym asystentem AI. Odpowiadaj zwięźle i na temat.")
+    lines.append("<|end|>")
+    
+    if history:
+        for msg in history[-10:]:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            if role == "user":
+                lines.append(f"<|user|>")
+                lines.append(content)
+                lines.append("<|end|>")
+            elif role == "assistant":
+                lines.append(f"<|assistant|>")
+                lines.append(content)
+                lines.append("<|end|>")
+    
+    lines.append("<|user|>")
+    lines.append(user_text)
+    lines.append("<|end|>")
+    lines.append("<|assistant|>")
+    
+    return "\n".join(lines)
 
-def _build_answer_only_prompt(user_text: str) -> str:
-    return (
-        "You are a helpful assistant.\n"
-        "Return only the final answer for the user.\n"
-        "Do not output analysis, reasoning, thought process, steps, or hidden thinking.\n"
-        "Output format must be exactly: <final>YOUR ANSWER</final>\n\n"
-        f"User question:\n{user_text}\n\n"
-        "<final>"
-    )
-
-
-def _write_chat_debug(stage: str, user_text: str, raw_response: str, filtered: str) -> None:
-    try:
-        stamp = datetime.now().isoformat()
-        entry = (
-            f"[{stamp}] stage={stage}\n"
-            f"USER: {user_text}\n"
-            f"RAW: {(raw_response or '').replace(chr(13), ' ').replace(chr(10), '\\n')[:3000]}\n"
-            f"FILTERED: {(filtered or '').replace(chr(13), ' ').replace(chr(10), '\\n')[:1000]}\n"
-            f"{'-' * 80}\n"
-        )
-        with open("chat_debug.log", "a", encoding="utf-8") as handle:
-            handle.write(entry)
-    except Exception:
-        pass
-
-
-def _run_with_spinner(func, desc: str = "generating"):
+def _run_with_spinner(func, desc: str = "generating", allow_cancel: bool = False, cancel_event: Optional[threading.Event] = None):
     outcome: Dict[str, Any] = {"value": None, "error": None}
     finished = threading.Event()
 
@@ -1888,24 +1585,38 @@ def _run_with_spinner(func, desc: str = "generating"):
     idx = 0
     started = time.time()
     last_len = 0
-    while not finished.wait(0.1):
-        elapsed = int(max(0, time.time() - started))
-        line = f"{frames[idx % len(frames)]} {desc} {elapsed}s"
-        print("\r" + " " * last_len, end="\r")
-        print(line, end="", flush=True)
+    cancel_requested = False
+    
+    while not finished.wait(0.02 if allow_cancel else 0.05):
+        if allow_cancel and cancel_event is not None and not cancel_requested and _consume_escape_keypress():
+            cancel_event.set()
+            cancel_requested = True
+            if last_len > 0:
+                sys.stdout.write("\r" + " " * last_len + "\r")
+                sys.stdout.flush()
+                last_len = 0
+
+        if cancel_requested:
+            continue
+
+        elapsed = max(0.0, time.time() - started)
+        line = f"\r{frames[idx % len(frames)]} [time: {elapsed:.2f}s]"
+        sys.stdout.write(line)
+        sys.stdout.flush()
         last_len = len(line)
         idx += 1
 
-    if last_len:
-        print("\r" + " " * last_len, end="\r", flush=True)
+    sys.stdout.write("\r" + " " * last_len + "\r")
+    sys.stdout.flush()
 
     worker.join(timeout=0.2)
     if outcome["error"] is not None:
         raise outcome["error"]
     return outcome["value"], time.time() - started
 
-
-def send_terminal_prompt(prompt: str, max_tokens: int = 512, temperature: float = 0.7, top_p: float = 0.9) -> bool:
+def send_terminal_prompt(prompt: str, max_tokens: int = -1, temperature: float = 0.7, top_p: float = 0.9) -> bool:
+    global TERMINAL_CHAT_HISTORY
+    
     if not loader or not loader.current_model:
         print("ERROR: No model loaded. Use 'load' first.")
         return False
@@ -1916,177 +1627,219 @@ def send_terminal_prompt(prompt: str, max_tokens: int = 512, temperature: float 
         return False
 
     try:
-        env_chat_limit = os.environ.get("RUN_AI_CHAT_MAX_TOKENS", "").strip()
-        try:
-            default_limit = max(64, min(4096, int(env_chat_limit))) if env_chat_limit else 768
-        except Exception:
-            default_limit = 768
-        capped_max_tokens = max(64, min(int(max_tokens or default_limit), default_limit))
+        requested_max_tokens = int(max_tokens) if max_tokens is not None else -1
+        if requested_max_tokens == 0:
+            requested_max_tokens = -1
         safe_temperature = min(max(float(temperature), 0.0), 0.7)
         safe_top_p = min(max(float(top_p), 0.1), 0.95)
-        total_elapsed = 0.0
 
-        primary_prompt = _build_answer_only_prompt(text)
-        response, elapsed = _run_with_spinner(
-            lambda: loader.generate(
-                prompt=primary_prompt,
-                max_tokens=capped_max_tokens,
+        full_prompt = _build_answer_only_prompt(text, TERMINAL_CHAT_HISTORY)
+        
+        cancel_event = threading.Event()
+
+        def generate_func():
+            chunks: List[str] = []
+            token_stream = loader.generate(
+                prompt=full_prompt,
+                max_tokens=requested_max_tokens,
                 temperature=safe_temperature,
                 top_p=safe_top_p,
-                stream=False,
+                stream=True,
                 stop=_reasoning_stop_tokens(),
-            ),
-            desc="generating"
-        )
-        total_elapsed += elapsed
+                cancel_event=cancel_event,
+            )
+            for token in token_stream:
+                chunks.append(token)
+            return "".join(chunks)
 
-        used_prompt = primary_prompt
-        used_raw_response = response or ""
-        filtered = _extract_visible_answer(used_raw_response)
-        if not filtered:
-            _write_chat_debug("primary-empty", text, used_raw_response, filtered)
-            retry_prompt = (
-                "Answer the question directly.\n"
-                "Output only final user-facing answer.\n"
-                "Do not include analysis or reasoning.\n"
-                "Format: <final>YOUR ANSWER</final>\n"
-                f"Question: {text}\n"
-                "<final>"
-            )
-            retry_response, retry_elapsed = _run_with_spinner(
-                lambda: loader.generate(
-                    prompt=retry_prompt,
-                    max_tokens=max(96, min(512, capped_max_tokens)),
-                    temperature=min(safe_temperature, 0.3),
-                    top_p=min(safe_top_p, 0.9),
-                    stream=False,
-                    stop=_reasoning_stop_tokens(),
-                ),
-                desc="retry"
-            )
-            total_elapsed += retry_elapsed
-            used_prompt = retry_prompt
-            used_raw_response = retry_response or ""
-            filtered = _extract_visible_answer(used_raw_response)
-        if not filtered:
-            _write_chat_debug("retry-empty", text, used_raw_response, filtered)
-            print("\nAI: [brak finalnej odpowiedzi]")
+        response, elapsed = _run_with_spinner(
+            generate_func,
+            "generating",
+            allow_cancel=True,
+            cancel_event=cancel_event,
+        )
+        total_elapsed = elapsed
+
+        if cancel_event.is_set():
+            print("\nINFO: Generation interrupted.")
             return False
 
-        prompt_tokens = loader.count_tokens(used_prompt) if hasattr(loader, "count_tokens") else max(1, len(used_prompt.split()))
-        output_tokens = loader.count_tokens(filtered) if hasattr(loader, "count_tokens") else max(1, len(filtered.split()))
+        filtered = _extract_visible_answer(response or "")
+        
+        if not filtered:
+            simple_prompt = _build_answer_only_prompt(text, None)
+            retry_cancel_event = threading.Event()
+            
+            def retry_generate():
+                chunks: List[str] = []
+                token_stream = loader.generate(
+                    prompt=simple_prompt,
+                    max_tokens=requested_max_tokens,
+                    temperature=min(safe_temperature, 0.3),
+                    top_p=min(safe_top_p, 0.9),
+                    stream=True,
+                    stop=_reasoning_stop_tokens(),
+                    cancel_event=retry_cancel_event,
+                )
+                for token in token_stream:
+                    chunks.append(token)
+                return "".join(chunks)
+            
+            response, retry_elapsed = _run_with_spinner(
+                retry_generate,
+                "retrying",
+                allow_cancel=True,
+                cancel_event=retry_cancel_event,
+            )
+            total_elapsed += retry_elapsed
+            if retry_cancel_event.is_set():
+                print("\nINFO: Generation interrupted.")
+                return False
+            filtered = _extract_visible_answer(response or "")
+            
+        if not filtered:
+            print("\nAI: [brak odpowiedzi]")
+            return False
+
+        prompt_tokens = loader.count_tokens(full_prompt)
+        output_tokens = loader.count_tokens(filtered)
         total_tokens = int(prompt_tokens) + int(output_tokens)
 
-        print(f"\n[tokens: {total_tokens} | time: {total_elapsed:.2f} sek]")
+        print(f"\n[Tokens: {total_tokens} | Time: {total_elapsed:.2f}s]")
         print(f"AI: {filtered}")
+        
+        TERMINAL_CHAT_HISTORY.append({"role": "user", "content": text})
+        TERMINAL_CHAT_HISTORY.append({"role": "assistant", "content": filtered})
+        
         return True
+        
     except Exception as e:
-        _write_chat_debug("exception", text, "", str(e))
         print(f"ERROR: Chat generation failed: {e}")
         return False
 
-
 def _extract_visible_answer(raw_text: str) -> str:
-    text = OutputFilter().feed(raw_text or "")
-    text = text.strip()
-    if not text:
+    if not raw_text:
         return ""
-
-    final_block = re.search(r"(?is)<\s*final\s*>(.*?)<\s*/\s*final\s*>", text)
-    if final_block:
-        candidate = final_block.group(1).strip(" \t\"'`.")
-        if candidate:
-            return candidate
-
-    final_open_only = re.search(r"(?is)<\s*final\s*>(.*)$", text)
-    if final_open_only:
-        candidate = final_open_only.group(1).strip(" \t\"'`.")
-        if candidate:
-            return candidate
-
-    assistant_final = re.search(r"(?is)assistant\s*final\s*[:\-]?\s*(.+)$", text)
-    if assistant_final:
-        candidate = assistant_final.group(1).strip(" \t\"'`.")
-        if candidate:
-            return candidate
-
+    
+    text = raw_text
     block_patterns = [
         r"<\s*think\s*>.*?<\s*/\s*think\s*>",
         r"<\s*analysis\s*>.*?<\s*/\s*analysis\s*>",
         r"<\s*reasoning\s*>.*?<\s*/\s*reasoning\s*>",
     ]
     for pattern in block_patterns:
-        text = re.sub(pattern, " ", text, flags=re.IGNORECASE | re.DOTALL)
-    text = text.strip()
+        text = re.sub(pattern, "", text, flags=re.IGNORECASE | re.DOTALL)
 
-    marker_regex = re.compile(
-        r"(?im)\b(?:final(?:\s+answer)?|answer|odpowiedz)\s*:\s*([^\n\r]+)"
+    lower_text = text.lower()
+    final_marker = "<|channel|>final|>"
+    final_pos = lower_text.rfind(final_marker)
+    if final_pos != -1:
+        text = text[final_pos + len(final_marker):]
+        lower_tail = text.lower()
+        end_idx = lower_tail.find("<|end|>")
+        if end_idx != -1:
+            text = text[:end_idx]
+
+    final_match = re.search(
+        r"(?is)(?:assistant\s*final|assistantfinal)\s*[:>\-| ]+\s*(.+)$",
+        text
     )
-    marker_matches = list(marker_regex.finditer(text))
-    if marker_matches:
-        candidate = marker_matches[-1].group(1).strip(" \t\"'`.")
-        if candidate:
-            return candidate
+    if final_match:
+        text = final_match.group(1)
 
-    cleaned_lines: List[str] = []
-    reasoning_prefixes = (
-        "analysis:",
-        "reasoning:",
-        "thinking:",
-        "thought:",
-        "let's think",
-        "i think",
-        "i should",
-        "i will",
-    )
-    for line in text.splitlines():
-        stripped = line.strip()
-        if not stripped:
-            continue
-        lower = stripped.lower()
-        if lower.startswith(reasoning_prefixes):
-            continue
-        if lower.startswith(("so final:", "so answer:", "final:", "answer:")):
-            parts = stripped.split(":", 1)
-            if len(parts) == 2 and parts[1].strip():
-                cleaned_lines.append(parts[1].strip())
-            continue
-        cleaned_lines.append(stripped)
+    ai_markers = list(re.finditer(r"(?im)^\s*AI\s*:\s*", text))
+    if ai_markers:
+        text = text[ai_markers[-1].start():]
+        text = re.sub(r"(?im)^\s*AI\s*:\s*", "", text, count=1)
+    
+    marker_assistant = "<|assistant|>"
+    marker_end = "<|end|>"
+    marker_user = "<|user|>"
+    marker_system = "<|system|>"
+    lower_text = text.lower()
+    assistant_pos = lower_text.rfind(marker_assistant)
+    if assistant_pos != -1:
+        text = text[assistant_pos + len(marker_assistant):]
+        lower_tail = text.lower()
+        cut_positions = []
+        for marker in (marker_end, marker_user, marker_system):
+            idx = lower_tail.find(marker)
+            if idx != -1:
+                cut_positions.append(idx)
+        if cut_positions:
+            text = text[:min(cut_positions)]
 
-    if not cleaned_lines:
-        return text
-
-    deduped: List[str] = []
-    for line in cleaned_lines:
-        if not deduped or deduped[-1] != line:
-            deduped.append(line)
-    return "\n".join(deduped).strip()
-
+    text = re.sub(r"<\s*/\s*assistant\s*>", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"<\s*assistant\s*>", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"<\|assistant[^>]*\|>", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"<\|end\|>", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"<\|[^>]+?\|>", "", text, flags=re.IGNORECASE)
+    return text.strip()
 
 def _is_escape_input(text: str) -> bool:
     value = (text or "").strip().lower()
     return value in {"exit", "quit"} or ("\x1b" in (text or ""))
 
-
 def _is_chat_pause_toggle(text: str) -> bool:
     value = (text or "").strip().lower()
     return value in {"/pause", ":pause"}
 
-
 def _is_model_unload_shortcut(text: str) -> bool:
     value = (text or "").strip().lower()
-    return value in {"/esc", ":esc"} or ("\x1b" in (text or ""))
+    return value in {"esc", "/esc", ":esc", "q", "/q", ":q"} or ("\x1b" in (text or ""))
 
+def _handle_swap_command(raw_command: str) -> bool:
+    global TERMINAL_CHAT_HISTORY
+    if not loader:
+        print("ERROR: Loader not initialized")
+        return False
+
+    parts = (raw_command or "").strip().split(maxsplit=1)
+    target_model = parts[1].strip() if len(parts) > 1 else ""
+
+    if target_model:
+        preserved_history = list(TERMINAL_CHAT_HISTORY)
+        swapped = loader.load(target_model, show_try_errors=True)
+        if swapped:
+            TERMINAL_CHAT_HISTORY = preserved_history
+            print("INFO: Model swapped. Chat history kept.")
+        return swapped
+
+    show_models_menu()
+    choice = _read_terminal_line("> ").strip()
+    if choice.lower() in {"q", "quit", "cancel"}:
+        print("INFO: Swap cancelled.")
+        return False
+
+    models = loader.list_models()
+    selected_name = choice
+    if choice.isdigit():
+        idx = int(choice) - 1
+        if 0 <= idx < len(models):
+            selected_name = models[idx]["name"]
+        else:
+            print("ERROR: Invalid model number")
+            return False
+
+    preserved_history = list(TERMINAL_CHAT_HISTORY)
+    swapped = loader.load(selected_name, show_try_errors=True)
+    if swapped:
+        TERMINAL_CHAT_HISTORY = preserved_history
+        print("INFO: Model swapped. Chat history kept.")
+    return swapped
 
 def run_terminal_chat_session() -> None:
+    global TERMINAL_CHAT_HISTORY
+    
     if not loader or not loader.current_model:
         print("ERROR: No model loaded. Use 'load' first.")
         return
 
-    print("\nChat mode started. Press Esc to unload model and leave chat.")
+    print("\nChat mode started. Press Esc or 'q' to unload model and leave chat.")
     print("Type 'exit' or 'quit' to leave chat without unloading.")
     print("Use '/pause' to pause/resume chat.")
     chat_paused = False
+    
     while True:
         try:
             chat_prompt = "> " if chat_paused else "AI> "
@@ -2106,10 +1859,15 @@ def run_terminal_chat_session() -> None:
                 print("INFO: Chat resumed.")
             continue
 
+        if (user_text or "").strip().lower().split()[0:1] in [["/swap"], ["swap"]]:
+            _handle_swap_command(user_text)
+            continue
+
         if _is_model_unload_shortcut(user_text):
             if loader and loader.current_model:
                 if loader.unload():
                     print("SUCCESS: Model unloaded from memory")
+                    TERMINAL_CHAT_HISTORY.clear()
                 else:
                     print("ERROR: Failed to unload model")
             else:
@@ -2127,13 +1885,12 @@ def run_terminal_chat_session() -> None:
 
         if not (user_text or "").strip():
             continue
+            
         send_terminal_prompt(user_text)
-
 
 def _should_keep_terminal_open() -> bool:
     value = os.environ.get("RUN_AI_KEEP_OPEN", "1").strip().lower()
     return value not in {"0", "false", "no", "off"}
-
 
 def _wait_before_terminal_close() -> None:
     if not _should_keep_terminal_open():
@@ -2147,9 +1904,8 @@ def _wait_before_terminal_close() -> None:
     except EOFError:
         pass
 
-
 def main():
-    global http_server, loader, HAS_AI_ENGINE, LAST_UPDATE_STATUS, HTTP_PORT
+    global http_server, loader, HAS_AI_ENGINE, LAST_UPDATE_STATUS, HTTP_PORT, TERMINAL_CHAT_HISTORY
 
     loader = SimpleGGUFLoader()
 
@@ -2202,6 +1958,7 @@ def main():
                     if loader and loader.current_model:
                         if loader.unload():
                             print("SUCCESS: Model unloaded from memory")
+                            TERMINAL_CHAT_HISTORY.clear()
                         else:
                             print("ERROR: Failed to unload model")
                     else:
@@ -2223,7 +1980,20 @@ def main():
 
                 elif command_name == 'models':
                     show_models_menu()
-                    choice = input("> ").strip()
+                    choice = _read_terminal_line("> ").strip()
+                    if choice.lower() in {"q", "quit", "cancel"}:
+                        print("INFO: Load cancelled.")
+                        continue
+                    if _is_model_unload_shortcut(choice):
+                        if loader and loader.current_model:
+                            if loader.unload():
+                                print("SUCCESS: Model unloaded from memory")
+                                TERMINAL_CHAT_HISTORY.clear()
+                            else:
+                                print("ERROR: Failed to unload model")
+                        else:
+                            print("INFO: Load cancelled.")
+                        continue
                     if choice.isdigit():
                         models = loader.list_models()
                         idx = int(choice) - 1
@@ -2236,12 +2006,28 @@ def main():
                         loader.load(model_name, show_try_errors=True)
                     else:
                         show_models_menu()
-                        choice = input("> ").strip()
+                        choice = _read_terminal_line("> ").strip()
+                        if choice.lower() in {"q", "quit", "cancel"}:
+                            print("INFO: Load cancelled.")
+                            continue
+                        if _is_model_unload_shortcut(choice):
+                            if loader and loader.current_model:
+                                if loader.unload():
+                                    print("SUCCESS: Model unloaded from memory")
+                                    TERMINAL_CHAT_HISTORY.clear()
+                                else:
+                                    print("ERROR: Failed to unload model")
+                            else:
+                                print("INFO: Load cancelled.")
+                            continue
                         if choice.isdigit():
                             models = loader.list_models()
                             idx = int(choice) - 1
                             if 0 <= idx < len(models):
                                 loader.load(models[idx]['name'], show_try_errors=True)
+
+                elif command_name in ('/swap', 'swap'):
+                    _handle_swap_command(raw_command)
 
                 elif command_name == 'catalog':
                     show_download_catalog()
@@ -2281,6 +2067,7 @@ def main():
                 elif command_name == 'unload':
                     if loader.unload():
                         print("SUCCESS: Model unloaded from memory")
+                        TERMINAL_CHAT_HISTORY.clear()
                     else:
                         print("ERROR: Failed to unload model")
 
@@ -2302,6 +2089,8 @@ def main():
 
                 elif command_name in ('clear', 'cls', 'wyczysc'):
                     clear_screen()
+                    TERMINAL_CHAT_HISTORY.clear()
+                    print("INFO: Chat history cleared.")
 
                 elif command_name == 'version':
                     if HAS_AI_ENGINE:
@@ -2373,8 +2162,3 @@ if __name__ == "__main__":
         traceback.print_exc()
     finally:
         _wait_before_terminal_close()
-
-
-
-
-
