@@ -1,5 +1,30 @@
 # CMD LOCAL AI - Changelog
 
+## Update 1.1.0
+Released: 2026-02-23
+
+### Fix Bugs 
+1. Fix load model (now worker progres).
+2. Fix UI.
+3. Added fallback for `./models` permissions issue.
+4. safer charging parameters (including fallback without mmap) to reduce the risk of hang on some models.
+5. Aliasy modeli są teraz ładowane dynamicznie z `models/`
+
+### showing chat history to model (BETA)
+1. now the model can read the histories of a given session without creating additional files.
+
+### New model generating UI
+1. Now model when generating answer there is a new look.
+
+### model change during conversation
+1. you can now change your model while chatting with another
+   
+### Detecking python if availabe
+1. There is also an auto-attempt to run the app on Python 3.11, if available.
+
+### Removing the token limit
+1. There is no limit now!!!
+
 ## Update 1.1.0beta 
 Released: 2026-02-20
 
