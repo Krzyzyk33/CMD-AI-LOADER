@@ -3,6 +3,10 @@ __pycache__/
 *.pyo
 *.pyd
 
+FAG.md
+README.md
+ROADMAP.md
+
 assets/
 CMDAI.ico
 CMDAI.mp4
