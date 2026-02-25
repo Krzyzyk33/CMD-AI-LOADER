@@ -5,7 +5,8 @@ A local terminal AI assistant based on GGUF and llama‑cpp‑python models.
 No cloud. Complete privacy.
 
 ## 🎥 Demo
-coming soon....
+
+![CMDAI](assets/CMDAI.mp4)
 
 ## ⚙️ Functions
 
@@ -105,6 +106,7 @@ CMD LOCAL AI is a project being developed step by step. Below are the directions
 ---
 
 ### 🤗 THANKS FOR READING :)
+
 
 
 
