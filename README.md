@@ -6,7 +6,7 @@ No cloud. Complete privacy.
 
 ## 🎥 Demo
 
-![CMDAI](assets/CMDAI.mp4)
+<video src="https://github.com/Krzyzyk33/CMDAI/releases/v1.0/CMDAI.mp4" controls width="500"></video>
 
 ## ⚙️ Functions
 
@@ -106,6 +106,7 @@ CMD LOCAL AI is a project being developed step by step. Below are the directions
 ---
 
 ### 🤗 THANKS FOR READING :)
+
 
 
 
