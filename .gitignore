@@ -3,6 +3,10 @@ __pycache__/
 *.pyo
 *.pyd
 
+assets/
+CMDAI.ico
+CMDAI.mp4
+
 python311/
 .venv/
 venv/
