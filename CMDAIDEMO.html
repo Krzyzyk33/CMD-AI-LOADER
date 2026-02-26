@@ -3,42 +3,609 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CMDAI – Demo Video</title>
+    <title>VideoHub - Platforma Wideo</title>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-card: #21262d;
+            --bg-hover: #30363d;
+            --text-primary: #f0f6fc;
+            --text-secondary: #8b949e;
+            --accent: #58a6ff;
+            --border: #30363d;
+            --success: #238636;
+        }
+
         body {
-            background: #111;
-            color: #fff;
-            font-family: Arial, sans-serif;
-            text-align: center;
-            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.5;
         }
-        video {
-            width: 100%;
-            max-width: 900px;
+
+        /* Header - styl GitHub */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 62px;
+            background-color: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            padding: 0 32px;
+            z-index: 1000;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+            text-decoration: none;
+            letter-spacing: -0.5px;
+        }
+
+        .logo-icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, #8957e5 0%, #58a6ff 100%);
             border-radius: 10px;
-            margin-top: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: 0 2px 8px rgba(88, 166, 255, 0.3);
         }
-        h1 {
-            font-size: 2rem;
-            margin-bottom: 10px;
+
+        /* Main Content */
+        .main-container {
+            margin-top: 62px;
+            padding: 32px;
+            max-width: 1280px;
+            margin-left: auto;
+            margin-right: auto;
         }
-        p {
-            opacity: 0.8;
+
+        .page-header {
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .page-title {
+            font-size: 24px;
+            font-weight: 400;
+            color: var(--text-primary);
+        }
+
+        /* Grid wideo */
+        .videos-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+            gap: 24px;
+        }
+
+        /* Karta wideo - styl GitHub */
+        .video-card {
+            background-color: var(--bg-secondary);
+            border-radius: 12px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 1px solid var(--border);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+
+        .video-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--accent);
+            box-shadow: 0 8px 24px rgba(88, 166, 255, 0.15);
+        }
+
+        .thumbnail-wrapper {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 16/9;
+            background: var(--bg-primary);
+            overflow: hidden;
+        }
+
+        .thumbnail {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.3s ease;
+        }
+
+        .video-card:hover .thumbnail {
+            transform: scale(1.03);
+        }
+
+        .play-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 64px;
+            height: 64px;
+            background: rgba(13, 17, 23, 0.9);
+            border: 2px solid rgba(255,255,255,0.2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: all 0.2s ease;
+            backdrop-filter: blur(4px);
+        }
+
+        .video-card:hover .play-overlay {
+            opacity: 1;
+        }
+
+        .play-icon {
+            font-size: 24px;
+            color: white;
+            margin-left: 4px;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+        }
+
+        .video-info-card {
+            padding: 16px;
+        }
+
+        .video-title-card {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            line-height: 1.4;
+        }
+
+        .video-meta {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        .video-date-card::before {
+            content: "📅 ";
+        }
+
+        /* Pełny ekran wideo */
+        .fullscreen-video {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #000;
+            z-index: 9999;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        .fullscreen-video.active {
+            display: flex;
+        }
+
+        .video-container-full {
+            width: 100%;
+            background: #000;
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .video-player-full {
+            width: 100%;
+            max-height: 70vh;
+            display: block;
+            margin: 0 auto;
+        }
+
+        /* Sekcja informacji i komentarzy NA DOLE */
+        .content-below {
+            background: var(--bg-primary);
+            border-top: 1px solid var(--border);
+            padding: 24px 32px;
+            max-width: 1280px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .video-info-section {
+            margin-bottom: 32px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .video-title-full {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: var(--text-primary);
+            line-height: 1.4;
+        }
+
+        .video-meta-full {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 16px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .video-description-full {
+            color: var(--text-secondary);
+            font-size: 14px;
+            line-height: 1.6;
+            padding: 16px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        /* Sekcja komentarzy */
+        .comments-section {
+            margin-top: 24px;
+        }
+
+        .comments-header {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-primary);
+        }
+
+        .giscus-wrapper {
+            min-height: 400px;
+        }
+
+        /* Przycisk zamknięcia */
+        .close-fullscreen {
+            position: fixed;
+            top: 16px;
+            left: 16px;
+            width: 40px;
+            height: 40px;
+            background: rgba(22, 27, 34, 0.95);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 18px;
+            cursor: pointer;
+            z-index: 10001;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            backdrop-filter: blur(8px);
+        }
+
+        .close-fullscreen:hover {
+            background: var(--bg-hover);
+            border-color: var(--accent);
+        }
+
+        .close-fullscreen.visible {
+            display: flex;
+        }
+
+        /* Hidden title */
+        .hidden-title {
+            display: none;
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+            grid-column: 1 / -1;
+        }
+
+        .empty-state h2 {
+            color: var(--text-primary);
+            margin-bottom: 12px;
+            font-weight: 400;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .main-container {
+                padding: 16px;
+            }
+
+            .header {
+                padding: 0 16px;
+            }
+
+            .videos-grid {
+                grid-template-columns: 1fr;
+                gap: 16px;
+            }
+
+            .content-below {
+                padding: 16px;
+            }
+
+            .video-player-full {
+                max-height: 50vh;
+            }
+        }
+
+        /* Scrollbar - styl GitHub */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--bg-hover);
+            border-radius: 5px;
+            border: 2px solid var(--bg-primary);
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--border);
         }
     </style>
+<base target="_blank">
 </head>
 <body>
+    <!-- Header -->
+    <header class="header">
+        <a href="#" class="logo">
+            <div class="logo-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0012 2z" fill="white"/>
+                </svg>
+            </div>
+            <span>VideoHub</span>
+        </a>
+    </header>
 
-    <h1>CMDAI – Demo Wideo</h1>
-    <p>You are playing in demo because GitHub is not able to play your file because it is too big</p>
+    <!-- Main Content -->
+    <main class="main-container">
+        <div class="page-header">
+            <h1 class="page-title">Filmy</h1>
+        </div>
 
-    <video controls>
-        <source src="assets/CMDAIVideo.mp4" type="video/mp4">
-         Your browser does not support the video player.
-    </video>
+        <div class="videos-grid" id="videos-grid">
+            <!-- Filmy będą tutaj generowane -->
+        </div>
+    </main>
 
-    <h2> Next video coming soon</h2>
-    <h3> Next videos with bigger update </h3>
-    
+    <!-- Pełny ekran wideo -->
+    <div class="fullscreen-video" id="fullscreen-video">
+        <button class="close-fullscreen" id="close-fullscreen" onclick="closeFullscreen()">←</button>
+
+        <div class="video-container-full">
+            <video class="video-player-full" id="fullscreen-player" controls>
+                <source src="" type="video/mp4">
+                Twoja przeglądarka nie obsługuje odtwarzacza wideo.
+            </video>
+        </div>
+
+        <!-- Zawartość pod filmem -->
+        <div class="content-below">
+            <div class="hidden-title" id="hidden-title" data-title=""></div>
+
+            <div class="video-info-section">
+                <h2 class="video-title-full" id="video-title"></h2>
+                <div class="video-meta-full">
+                    <span id="video-date"></span>
+                </div>
+                <div class="video-description-full" id="video-description"></div>
+            </div>
+
+            <div class="comments-section">
+                <div class="comments-header">
+                    <span>💬</span>
+                    <span>Komentarze</span>
+                </div>
+                <div class="giscus-wrapper" id="giscus-container"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // KONFIGURACJA FILMÓW - DODAJ SWOJE FILMY TUTAJ
+        // ============================================
+        const videos = [
+            {
+                title: "Demo projektu CMDAI",
+                date: "2024-01-20",
+                src: "assets/CMDAI.mp4",
+                thumbnail: "videos/thumbnails/cmdai-demo.jpg",
+                description: "Prezentacja możliwości systemu CMDAI - automatyczne generowanie kodu i analiza danych."
+            }
+        ];
+
+        // Konfiguracja Giscus - ZMIEŃ TE WARTOŚCI
+        const GISCUS_CONFIG = {
+            repo: "Krzyzyk33/CMDAI",
+            repoId: "R_kgDORT_FgQ",
+            category: "Comments",
+            categoryId: "DIC_kwDORT_Fgc4C3Q86",
+            reactionsEnabled: "1",
+            emitMetadata: "0",
+            inputPosition: "top",
+            theme: "dark",
+            lang: "pl",
+            loading: "lazy"
+        };
+
+        // ============================================
+        // FUNKCJE
+        // ============================================
+
+        let currentVideo = null;
+
+        function sortVideos(videos) {
+            return [...videos].sort((a, b) => new Date(b.date) - new Date(a.date));
+        }
+
+        function formatDate(dateString) {
+            return new Date(dateString).toLocaleDateString('pl-PL', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+        }
+
+        function getThumbnail(video) {
+            if (video.thumbnail) return video.thumbnail;
+            const colors = ['#8957e5', '#58a6ff', '#238636', '#d29922', '#da3633', '#8b949e'];
+            const color = colors[video.title.length % colors.length];
+            return `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='360'%3E%3Crect fill='${encodeURIComponent(color)}' width='640' height='360'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='Arial' font-size='48' fill='white'%3E▶%3C/text%3E%3C/svg%3E`;
+        }
+
+        function createVideoCard(video, index) {
+            const card = document.createElement('div');
+            card.className = 'video-card';
+            card.onclick = () => openFullscreen(index);
+
+            card.innerHTML = `
+                <div class="thumbnail-wrapper">
+                    <img class="thumbnail" src="${getThumbnail(video)}" alt="${video.title}" loading="lazy">
+                    <div class="play-overlay">
+                        <span class="play-icon">▶</span>
+                    </div>
+                </div>
+                <div class="video-info-card">
+                    <div class="video-title-card">${video.title}</div>
+                    <div class="video-meta">
+                        <span class="video-date-card">${formatDate(video.date)}</span>
+                    </div>
+                </div>
+            `;
+
+            return card;
+        }
+
+        function renderGrid() {
+            const grid = document.getElementById('videos-grid');
+            const sorted = sortVideos(videos);
+
+            if (sorted.length === 0) {
+                grid.innerHTML = `
+                    <div class="empty-state">
+                        <h2>Brak filmów</h2>
+                        <p>Dodaj filmy w sekcji konfiguracji w kodzie.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            sorted.forEach((video, index) => {
+                grid.appendChild(createVideoCard(video, index));
+            });
+        }
+
+        function openFullscreen(index) {
+            currentVideo = sortVideos(videos)[index];
+            const fullscreen = document.getElementById('fullscreen-video');
+            const player = document.getElementById('fullscreen-player');
+
+            // Ustaw wideo
+            player.querySelector('source').src = currentVideo.src;
+            player.load();
+
+            // Ustaw info
+            document.getElementById('video-title').textContent = currentVideo.title;
+            document.getElementById('video-date').textContent = `Opublikowano: ${formatDate(currentVideo.date)}`;
+            document.getElementById('video-description').textContent = currentVideo.description;
+            document.getElementById('hidden-title').setAttribute('data-title', currentVideo.title);
+
+            // Pokaż fullscreen
+            fullscreen.classList.add('active');
+            document.body.style.overflow = 'hidden';
+
+            // Pokaż przycisk
+            document.getElementById('close-fullscreen').classList.add('visible');
+
+            // Odtwórz
+            player.play().catch(() => {});
+
+            // Załaduj komentarze
+            loadGiscus(currentVideo.title);
+        }
+
+        function closeFullscreen() {
+            const fullscreen = document.getElementById('fullscreen-video');
+            const player = document.getElementById('fullscreen-player');
+
+            player.pause();
+            fullscreen.classList.remove('active');
+            document.body.style.overflow = '';
+
+            document.getElementById('close-fullscreen').classList.remove('visible');
+
+            // Wyczyść komentarze
+            document.getElementById('giscus-container').innerHTML = '';
+        }
+
+        function loadGiscus(title) {
+            const container = document.getElementById('giscus-container');
+            container.innerHTML = '';
+
+            const script = document.createElement('script');
+            script.src = 'https://giscus.app/client.js';
+            script.setAttribute('data-repo', GISCUS_CONFIG.repo);
+            script.setAttribute('data-repo-id', GISCUS_CONFIG.repoId);
+            script.setAttribute('data-category', GISCUS_CONFIG.category);
+            script.setAttribute('data-category-id', GISCUS_CONFIG.categoryId);
+            script.setAttribute('data-mapping', 'specific');
+            script.setAttribute('data-term', title);
+            script.setAttribute('data-reactions-enabled', GISCUS_CONFIG.reactionsEnabled);
+            script.setAttribute('data-emit-metadata', GISCUS_CONFIG.emitMetadata);
+            script.setAttribute('data-input-position', GISCUS_CONFIG.inputPosition);
+            script.setAttribute('data-theme', GISCUS_CONFIG.theme);
+            script.setAttribute('data-lang', GISCUS_CONFIG.lang);
+            script.setAttribute('data-loading', GISCUS_CONFIG.loading);
+            script.setAttribute('crossorigin', 'anonymous');
+            script.async = true;
+
+            container.appendChild(script);
+        }
+
+        // Zamykanie na ESC
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeFullscreen();
+        });
+
+        // Inicjalizacja
+        document.addEventListener('DOMContentLoaded', renderGrid);
+    </script>
 </body>
 </html>
