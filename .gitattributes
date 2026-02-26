@@ -1,4 +1,8 @@
 FAQ.md export-ignore
 README.md export-ignore
 ROADMAP.md export-ignore
-assets/CMDAI.mp4 filter=lfs diff=lfs merge=lfs -text
+
+assets/CMDAIVideo.mp4
+assets/CMDAI.ico
+
+CMDAIDEMO.html
