@@ -8,6 +8,10 @@ No cloud. Complete privacy.
 
 [![Zobacz demo](assets/preview.png)](https://krzyzyk33.github.io/CMDAI/CMDAIDEMO.html)
 
+## VideoHub
+
+[VideoHub](https://github.com/Krzyzyk33/CMDAI/CMDAIDEMO.html)
+
 ## ⚙️ Functions
 
 The application runs completely offline, using only local GGUF models, ensuring complete privacy and no internet dependency. It allows for conversations in the terminal. It supports downloading models from the `models` file, automatic model loading, generating responses, and much more. It has a built-in lightweight HTTP server that provides an API for communicating with the model in other applications.
@@ -111,6 +115,7 @@ CMD LOCAL AI is a project being developed step by step. Below are the directions
 ---
 
 ### 🤗 THANKS FOR READING :)
+
 
 
 
