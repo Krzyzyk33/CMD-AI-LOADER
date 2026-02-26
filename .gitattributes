@@ -6,3 +6,8 @@ assets/CMDAIVideo.mp4
 assets/CMDAI.ico
 
 CMDAIDEMO.html
+
+.gitignore
+.gitattributes
+
+index.html
