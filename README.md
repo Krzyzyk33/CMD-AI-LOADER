@@ -75,8 +75,8 @@ Here are simple ways you can support the project.
 
 ### OR
 
-1.Go to Discussions. 
-2.write your suggestions in the How To Help category.
+1. Go to Discussions. 
+2. write your suggestions in the How To Help category.
 
 Every contribution is appreciated!
 
@@ -111,6 +111,7 @@ CMD LOCAL AI is a project being developed step by step. Below are the directions
 ---
 
 ### 🤗 THANKS FOR READING :)
+
 
 
 
