@@ -14,7 +14,7 @@ No cloud. Complete privacy.
 
 ## 🎥 Demo
 
-[![CMDAI Demo](https://krzyzyk33.github.io/VideoHub/thumbnails/LM%20Studio%20vs%20Ollama%20vs%20CMDAI.png)](https://krzyzyk33.github.io/VideoHub/Videos/LM%20Studio%20vs%20Ollama%20vs%20CMDAI.mp4)
+[![CMDAI Demo](https://krzyzyk33.github.io/VideoHub/thumbnails/CMDAIDemo.png)](https://krzyzyk33.github.io/VideoHub/Videos/CMDAIDemo.mp4)
 
 
 ## ⚙️ Functions
@@ -120,6 +120,7 @@ CMD LOCAL AI is a project being developed step by step. Below are the directions
 ---
 
 ### 🤗 THANKS FOR READING :)
+
 
 
 
