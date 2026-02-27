@@ -12,7 +12,10 @@ No cloud. Complete privacy.
 
 ## DEMO
 
-[Demo](https://krzyzyk33.github.io/VideoHub/Videos/CMDAIDemo.mp4
+## 🎥 Demo
+
+[![CMDAI Demo](https://krzyzyk33.github.io/VideoHub/thumbnails/LM Studio vs Ollama vs CMDAI.png)](https://krzyzyk33.github.io/VideoHub/Videos/LM Studio vs Ollama vs CMDAI.mp4)
+
 ## ⚙️ Functions
 
 The application runs completely offline, using only local GGUF models, ensuring complete privacy and no internet dependency. It allows for conversations in the terminal. It supports downloading models from the `models` file, automatic model loading, generating responses, and much more. It has a built-in lightweight HTTP server that provides an API for communicating with the model in other applications.
@@ -116,6 +119,7 @@ CMD LOCAL AI is a project being developed step by step. Below are the directions
 ---
 
 ### 🤗 THANKS FOR READING :)
+
 
 
 
