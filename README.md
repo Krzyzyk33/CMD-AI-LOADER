@@ -14,7 +14,7 @@ No cloud. Complete privacy.
 
 ## 🎥 Demo
 
-[![CMDAI Demo](https://krzyzyk33.github.io/VideoHub/thumbnails/CMDAIDemo.png)](https://krzyzyk33.github.io/VideoHub/Videos/CMDAIDemo.mp4)
+[![CMDAI Demo](https://krzyzyk33.github.io/VideoHub/thumbnails/CMDAIDEMO.png)](https://krzyzyk33.github.io/VideoHub/Videos/CMDAIDemo.mp4)
 
 
 
@@ -121,6 +121,7 @@ CMD LOCAL AI is a project being developed step by step. Below are the directions
 ---
 
 ### 🤗 THANKS FOR READING :)
+
 
 
 
