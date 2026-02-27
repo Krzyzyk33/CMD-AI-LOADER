@@ -8,7 +8,7 @@ No cloud. Complete privacy.
 
 ## VideoHub
 
-[VideoHub](https://krzyzyk33.github.io/CMDAI/CMDAIDEMO.html)
+[VideoHub](https://krzyzyk33.github.io/VideoHub/VideoHub.html)
 
 ## ⚙️ Functions
 
@@ -113,6 +113,7 @@ CMD LOCAL AI is a project being developed step by step. Below are the directions
 ---
 
 ### 🤗 THANKS FOR READING :)
+
 
 
 
