@@ -27,23 +27,19 @@ The application runs completely offline, using only local GGUF models, ensuring 
 2. Install a GGUF model and copy it to models/.
 3. Run the application:
 `py -3 run.py`
-4. Load the model:
-`load <filename.gguf>`
-5. Talk to the model:
-`ai`
-or:
-`chat <text>`
+or
+Double-click on the file `run.py`
+5. Load the model:
+`load`
+6. Talk to the model
 
 ### CLI commands
 
+- `help` - help 
 - `load` - choose model from list
-- `load <name>` - load model by filename
 - `models` - list local GGUF models
 - `catalog` - list downloadable aliases
-- `download <alias|url> [file.gguf]` - download model
-- `pull <alias|url> [file.gguf]` - alias for `download`
-- `ai` - chat mode (`AI>`)
-- `chat <text>` - single message
+- `/pause` - enable or disable pause while talking to the model
 - `unload` - unload model from RAM
 - `status` - app status
 - `version` - `llama-cpp-python` version
@@ -99,7 +95,7 @@ Every contribution is appreciated!
 
 ## ⭐ Inspirations
 
-This project was inspired by tools like **Ollama** and **LM Studio**, which showed how powerful and accessible local AI models can be.  
+This project was inspired by tools like **Ollama**, **LM Studio** and **Claude Code**, which showed how powerful and accessible local AI models can be.  
 I wanted to bring a similar experience directly into the command line — simple, fast, and fully local — without the need for heavy interfaces or external services.  
 CMD LOCAL AI is my attempt to create a clean, terminal‑native way to interact with AI models.
 
@@ -118,6 +114,7 @@ CMD LOCAL AI is a project being developed step by step. Below are the directions
 ---
 
 ### 🤗 THANKS FOR READING :)
+
 
 
 
