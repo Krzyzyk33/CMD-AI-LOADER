@@ -56,6 +56,18 @@ Double-click on the file `run.py`
 
 ---
 
+## Why CMDAI?
+
+CMDAI is a lightweight, transparent, and developer‑friendly tool for running local GGUF models without the overhead of large frameworks.
+
+1. Lightweight architecture — no containers, servers, or heavy dependencies.
+2. Terminal‑first workflow — clear, predictable behavior with full control.
+3. Fast model switching — load and unload models instantly without restarting.
+4. Built‑in API server — easy integration with apps, scripts, and automation.
+5. Fully offline — all processing happens locally for maximum privacy.
+6. Simpler than Ollama, lighter than LM Studio — minimal overhead, maximum flexibility.
+7. Developer‑oriented design — clean structure, CLI tools, API access, and an open roadmap.
+
 ## How to Help with CMDAI
 
 Thank you for your interest in improving CMDAI!
@@ -114,6 +126,7 @@ CMD LOCAL AI is a project being developed step by step. Below are the directions
 ---
 
 ### 🤗 THANKS FOR READING :)
+
 
 
 
