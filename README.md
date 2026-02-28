@@ -75,17 +75,17 @@ Here are simple ways you can support the project.
 
 ### Ways You Can Help
 
-- Report bugs in the **Issues** tab
-- Suggest new features
-- Test the application on your system
-- Share improvement ideas
-- Add and test new GGUF models
+1. Report bugs in the **Issues** tab
+2. Suggest new features
+3. Test the application on your system
+4. Share improvement ideas
+5. Add and test new GGUF models
 
 ### How to Submit an Issue
 
 1. Go to the **Issues** tab
 2. Click **New Issue**
-3. Choose: Bug / Feature / Idea
+3. Choose: Bug / Feature 
 4. Describe the problem or suggestion clearly
 
 ### OR
@@ -126,6 +126,7 @@ CMD LOCAL AI is a project being developed step by step. Below are the directions
 ---
 
 ### 🤗 THANKS FOR READING :)
+
 
 
 
