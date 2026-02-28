@@ -1,0 +1,8 @@
+# Tested models
+
+---
+
+## gpt-oss:20b 
+Time model load: 2sec - 5sec
+model reply: 1sec - 3sec 
+RAM: 9MB - 19MB
