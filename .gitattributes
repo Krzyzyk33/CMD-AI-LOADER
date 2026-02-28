@@ -2,15 +2,17 @@ FAQ.md export-ignore
 README.md export-ignore
 ROADMAP.md export-ignore
 
-assets/CMDAIold1.ico
-assets/CMDAI.ico
-assets/CMDAIold.ico
+assets/CMDAIold1.ico export-ignore
+assets/CMDAI.ico export-ignore
+assets/CMDAIold.ico export-ignore
 
 
-.gitignore
-.gitattributes
+.gitignore export-ignore
+.gitattributes export-ignore
 
-instructions.html
+instructions.html export-ignore
 
-.github/ISSUE_TEMPLATE
-.github
+.github/ISSUE_TEMPLATE export-ignore
+.github export-ignore
+
+CODE_OF_CONDUCT.md export-ignore
