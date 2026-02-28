@@ -10,7 +10,7 @@ assets/CMDAIold.ico
 .gitignore
 .gitattributes
 
-index.html
+instructions.html
 
 .github/ISSUE_TEMPLATE
 .github
